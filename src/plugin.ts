@@ -13,6 +13,7 @@ import { defaultRegistry, type IdeSpec } from './hub/registry.ts';
 import { inventory, expandPath, type IdeInventory } from './hub/inventory.ts';
 import { planMigration, renderPlan, type QuotaState } from './hub/migrate.ts';
 import { discoverRules, renderInventoryNote, renderMigrationNote, renderRulesNotes, writeNotes, type RuleFileInfo } from './hub/obsidian.ts';
+import { scanClaudeCode, scanCodex, aggregate, renderUsage, recentSessions } from './hub/usage.ts';
 
 export const name = 'ide-hub';
 export const inject = ['commands'];
@@ -99,6 +100,31 @@ export function apply(ctx: Context, config: Config): void {
       ];
       const result = writeNotes(vaultDir, notes);
       return { kind: 'success', text: `导出完成：${result.written.length} 写入 / ${result.skipped} 未变。\n${result.written.map((file) => `  ${file}`).join('\n')}` };
+    },
+  });
+
+  ctx.commands.register({
+    name: 'hub-usage',
+    description: '各 IDE 真实用量（读本地转录，ccusage/splitrail 的跨工具版，含国产 IDE 适配位）',
+    handler: () => {
+      const records = [...scanClaudeCode(), ...scanCodex()];
+      return { kind: 'success', text: renderUsage(aggregate(records)) };
+    },
+  });
+
+  ctx.commands.register({
+    name: 'hub-sessions',
+    description: '跨 IDE 最近会话 + 一键恢复命令（claude --resume / codex resume / dsh --resume …）',
+    handler: () => {
+      const records = [...scanClaudeCode(), ...scanCodex()];
+      const sessions = recentSessions(records, 10);
+      if (!sessions.length) return { kind: 'error', text: '没有找到可恢复的会话。' };
+      const lines = sessions.map((session) => {
+        const cwd = session.cwd ? ` · ${session.cwd}` : '';
+        const resume = session.resumeCommand ?? '（该工具无私有恢复命令）';
+        return `  [${session.tool}] ${session.at.slice(0, 16).replace('T', ' ')}${cwd}\n    ↳ ${resume}`;
+      });
+      return { kind: 'success', text: `最近 ${sessions.length} 个会话:\n${lines.join('\n')}` };
     },
   });
 
