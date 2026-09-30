@@ -1,0 +1,12 @@
+# Mounts ide-hub into a dsh profile.
+- insert:
+    - id: ide-hub
+      name: dsh-plugin-ide-hub
+      config:
+        enabled: true
+        # vaultDir: "~/obsidian/MyVault"   # for /hub-export (IDE-Hub/ subtree)
+        # quotas:                          # for migration planning
+        #   - tool: zcode
+        #     remainingMajor: 12           # whole currency units left
+        #     dailyMajor: 3                # typical daily burn
+        #     priority: work
