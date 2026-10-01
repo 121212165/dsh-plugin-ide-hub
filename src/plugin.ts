@@ -15,6 +15,7 @@ import { planMigration, renderPlan, type QuotaState } from './hub/migrate.ts';
 import { discoverRules, renderInventoryNote, renderMigrationNote, renderRulesNotes, writeNotes, type RuleFileInfo } from './hub/obsidian.ts';
 import { scanClaudeCode, scanCodex, aggregate, renderUsage, recentSessions, type UsageRecord } from './hub/usage.ts';
 import { readZcodeUsage, readZcodeSessions, readZcodeModels, zcodeStats, type ZcodeUsageRecord } from './hub/zcode-db.ts';
+import { scanTrae, traeChatSessions } from './hub/trae-db.ts';
 
 export const name = 'ide-hub';
 export const inject = ['commands'];
@@ -129,6 +130,8 @@ export function apply(ctx: Context, config: Config): void {
     handler: () => {
       const records = [...scanClaudeCode(), ...scanCodex()];
       const sessions = [...recentSessions(records, 10), ...readZcodeSessions(undefined, 5)];
+      const trae = traeChatSessions(scanTrae(), 5);
+      const traeLines = trae.map((session) => `  [trae] ${(session.updatedAt || '').slice(0, 16).replace('T', ' ')} · ${session.title.slice(0, 30)}（${session.localMessages} 条本地消息${session.hasMore ? '，云上有更多' : ''}）— 无 CLI 恢复命令，需在 Trae 内打开项目 ${session.workspaceFolder ?? ''}`);
       if (!sessions.length) return { kind: 'error', text: '没有找到可恢复的会话。' };
       const lines = sessions.map((session) => {
         const cwd = session.cwd ? ` · ${session.cwd}` : '';
