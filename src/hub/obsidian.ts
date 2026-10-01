@@ -1,5 +1,5 @@
 import { existsSync, readFileSync, writeFileSync, mkdirSync, statSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, basename } from 'node:path';
 import { expandPath } from './inventory.ts';
 import type { IdeSpec } from './registry.ts';
 
@@ -55,6 +55,10 @@ export function renderRulesNotes(rules: RuleFileInfo[], updated: string): Obsidi
     .map((rule) => `- [${rule.tool}] ${rule.path}（${rule.bytes} 字节，改于 ${rule.mtime.slice(0, 10)}）`)
     .join('\n')}\n`;
   const notes: ObsidianNote[] = [{ path: 'IDE-Hub/prompts/索引.md', content: index }];
+  // A tool can register several rule files (e.g. claude-code's CLAUDE.md +
+  // AGENTS.md); suffix the filename so they don't overwrite each other.
+  const perTool = new Map<string, number>();
+  for (const rule of rules) perTool.set(rule.tool, (perTool.get(rule.tool) ?? 0) + 1);
   for (const rule of rules) {
     let body = '';
     try {
@@ -62,9 +66,11 @@ export function renderRulesNotes(rules: RuleFileInfo[], updated: string): Obsidi
     } catch {
       body = '（读取失败）';
     }
+    const stem = basename(rule.path).replace(/\.[^.]+$/, '');
+    const name = (perTool.get(rule.tool) ?? 0) > 1 ? `${rule.tool}-${stem}` : rule.tool;
     notes.push({
-      path: `IDE-Hub/prompts/${rule.tool}.md`,
-      content: `${frontmatter(`${rule.tool} 规则快照`, ['ide-hub', 'prompts', rule.tool], updated)}\n\n# ${rule.tool} 规则快照\n\n来源: ${rule.path}\n\n${body}\n`,
+      path: `IDE-Hub/prompts/${name}.md`,
+      content: `${frontmatter(`${name} 规则快照`, ['ide-hub', 'prompts', rule.tool], updated)}\n\n# ${name} 规则快照\n\n来源: ${rule.path}\n\n${body}\n`,
     });
   }
   return notes;
