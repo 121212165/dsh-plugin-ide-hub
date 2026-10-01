@@ -13,7 +13,8 @@ import { defaultRegistry, type IdeSpec } from './hub/registry.ts';
 import { inventory, expandPath, type IdeInventory } from './hub/inventory.ts';
 import { planMigration, renderPlan, type QuotaState } from './hub/migrate.ts';
 import { discoverRules, renderInventoryNote, renderMigrationNote, renderRulesNotes, writeNotes, type RuleFileInfo } from './hub/obsidian.ts';
-import { scanClaudeCode, scanCodex, aggregate, renderUsage, recentSessions } from './hub/usage.ts';
+import { scanClaudeCode, scanCodex, aggregate, renderUsage, recentSessions, type UsageRecord } from './hub/usage.ts';
+import { readZcodeUsage, readZcodeSessions, zcodeStats, type ZcodeUsageRecord } from './hub/zcode-db.ts';
 
 export const name = 'ide-hub';
 export const inject = ['commands'];
@@ -107,8 +108,15 @@ export function apply(ctx: Context, config: Config): void {
     name: 'hub-usage',
     description: '各 IDE 真实用量（读本地转录，ccusage/splitrail 的跨工具版，含国产 IDE 适配位）',
     handler: () => {
-      const records = [...scanClaudeCode(), ...scanCodex()];
-      return { kind: 'success', text: renderUsage(aggregate(records)) };
+      const records: (UsageRecord | ZcodeUsageRecord)[] = [...scanClaudeCode(), ...scanCodex(), ...readZcodeUsage()];
+      const claudeCodex = records.filter((r) => r.tool !== 'zcode') as UsageRecord[];
+      const blocks = [renderUsage(aggregate(claudeCodex))];
+      const zc = readZcodeUsage();
+      if (zc.length) {
+        const st = zcodeStats(zc);
+        blocks.push(`zcode: ${st.totalTokens.toLocaleString()} tok（${st.turns} 轮 / 122+ 会话库）· 缓存命中 ${(st.cacheHitRate * 100).toFixed(1)}% · 非完成态 ${st.cancelled} 轮 · 工具错误 ${st.toolErrors}`);
+      }
+      return { kind: 'success', text: blocks.join('\n\n') };
     },
   });
 
@@ -117,7 +125,7 @@ export function apply(ctx: Context, config: Config): void {
     description: '跨 IDE 最近会话 + 一键恢复命令（claude --resume / codex resume / dsh --resume …）',
     handler: () => {
       const records = [...scanClaudeCode(), ...scanCodex()];
-      const sessions = recentSessions(records, 10);
+      const sessions = [...recentSessions(records, 10), ...readZcodeSessions(undefined, 5)];
       if (!sessions.length) return { kind: 'error', text: '没有找到可恢复的会话。' };
       const lines = sessions.map((session) => {
         const cwd = session.cwd ? ` · ${session.cwd}` : '';

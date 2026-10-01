@@ -1,7 +1,9 @@
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
-import { claudeRecord, codexRecord, resumeCommand, type UsageRecord, type SessionRef } from './usage-reader.ts';
+import { claudeRecord, codexRecord, resumeCommand } from './usage-reader.ts';
+import type { UsageRecord, SessionRef } from './usage-reader.ts';
+export type { UsageRecord, SessionRef };
 
 /** Scanners: walk the on-disk roots for each supported tool and emit uniform
  * records. Scanning is read-only and bounded (recent files only when the root
