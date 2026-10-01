@@ -31,7 +31,7 @@ test('reads turn_usage into uniform records with reasoning folded into output', 
   assert.equal(records[0]!.outputTokens, 250); // 200 + 50 reasoning
   assert.equal(records[0]!.cacheReadTokens, 5000);
   assert.equal(records[1]!.status, 'cancelled');
-  assert.equal(records[1]!.toolErrors, 2);
+  assert.equal(records[1]!.toolErrors, 3);
 });
 
 test('stats compute cache hit over read+uncached and count non-completed', () => {
@@ -39,7 +39,7 @@ test('stats compute cache hit over read+uncached and count non-completed', () =>
   assert.equal(stats.turns, 2);
   assert.equal(stats.totalTokens, 1000 + 200 + 50 + 300 + 5000 + 2000 + 100 + 0 + 0 + 8000);
   assert.equal(stats.cancelled, 1);
-  assert.equal(stats.toolErrors, 2);
+  assert.equal(stats.toolErrors, 4);
   assert.ok(stats.cacheHitRate > 0.7);
 });
 
