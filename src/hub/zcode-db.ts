@@ -117,3 +117,48 @@ export function zcodeStats(records: ZcodeUsageRecord[]): ZcodeTurnStat {
     toolErrors: records.reduce((sum, r) => sum + r.toolErrors, 0),
   };
 }
+
+export interface ZcodeModelUsage {
+  provider: string;
+  model: string;
+  calls: number;
+  inputTokens: number;
+  outputTokens: number;
+  cacheReadTokens: number;
+  cacheWriteTokens: number;
+  totalTokens: number;
+}
+
+/** Per provider/model aggregation from model_usage — which model burns the budget. */
+export function readZcodeModels(dbPath: string = zcodeDbPath()): ZcodeModelUsage[] {
+  if (!existsSync(dbPath)) return [];
+  const db = new DatabaseSync(dbPath, { readOnly: true });
+  try {
+    const rows = db.prepare(`
+      SELECT provider_id, model_id, COUNT(*) AS calls,
+             SUM(input_tokens) AS inp, SUM(output_tokens) AS outp,
+             SUM(cache_read_input_tokens) AS cr, SUM(cache_creation_input_tokens) AS cw
+      FROM model_usage
+      GROUP BY provider_id, model_id
+      ORDER BY inp + outp + cr + cw DESC
+    `).all() as Record<string, unknown>[];
+    return rows.map((row) => {
+      const input = num(row.inp);
+      const output = num(row.outp);
+      const cacheRead = num(row.cr);
+      const cacheWrite = num(row.cw);
+      return {
+        provider: String(row.provider_id ?? 'unknown'),
+        model: String(row.model_id ?? 'unknown'),
+        calls: num(row.calls),
+        inputTokens: input,
+        outputTokens: output,
+        cacheReadTokens: cacheRead,
+        cacheWriteTokens: cacheWrite,
+        totalTokens: input + output + cacheRead + cacheWrite,
+      };
+    });
+  } finally {
+    db.close();
+  }
+}

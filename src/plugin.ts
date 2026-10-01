@@ -14,7 +14,7 @@ import { inventory, expandPath, type IdeInventory } from './hub/inventory.ts';
 import { planMigration, renderPlan, type QuotaState } from './hub/migrate.ts';
 import { discoverRules, renderInventoryNote, renderMigrationNote, renderRulesNotes, writeNotes, type RuleFileInfo } from './hub/obsidian.ts';
 import { scanClaudeCode, scanCodex, aggregate, renderUsage, recentSessions, type UsageRecord } from './hub/usage.ts';
-import { readZcodeUsage, readZcodeSessions, zcodeStats, type ZcodeUsageRecord } from './hub/zcode-db.ts';
+import { readZcodeUsage, readZcodeSessions, readZcodeModels, zcodeStats, type ZcodeUsageRecord } from './hub/zcode-db.ts';
 
 export const name = 'ide-hub';
 export const inject = ['commands'];
@@ -115,6 +115,9 @@ export function apply(ctx: Context, config: Config): void {
       if (zc.length) {
         const st = zcodeStats(zc);
         blocks.push(`zcode: ${st.totalTokens.toLocaleString()} tok（${st.turns} 轮 / 122+ 会话库）· 缓存命中 ${(st.cacheHitRate * 100).toFixed(1)}% · 非完成态 ${st.cancelled} 轮 · 工具错误 ${st.toolErrors}`);
+        for (const model of readZcodeModels()) {
+          blocks.push(`  └ ${model.provider}/${model.model}: ${model.calls} 次请求 · ${model.totalTokens.toLocaleString()} tok（输入 ${model.inputTokens.toLocaleString()} · 输出 ${model.outputTokens.toLocaleString()} · 缓存读 ${model.cacheReadTokens.toLocaleString()}）`);
+        }
       }
       return { kind: 'success', text: blocks.join('\n\n') };
     },
