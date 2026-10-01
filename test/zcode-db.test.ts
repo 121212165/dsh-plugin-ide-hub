@@ -18,8 +18,8 @@ function fixtureDb(): string {
       duration_ms INTEGER, tool_call_count INTEGER, tool_error_count INTEGER);
   `);
   db.prepare("INSERT INTO session VALUES ('sess_a', '测试会话', 'C:/proj', 1789745764073)").run();
-  db.prepare("INSERT INTO turn_usage VALUES ('sess_a','t1',1789745764073,1789745800000,'completed',1000,200,50,300,5000,60000,4,1,0)").run();
-  db.prepare("INSERT INTO turn_usage VALUES ('sess_a','t2',1789746000000,1789746100000,'cancelled',2000,100,0,0,8000,30000,2,3,2)").run();
+  db.prepare("INSERT INTO turn_usage VALUES ('sess_a','t1',1789745764073,1789745800000,'completed',1000,200,50,300,5000,60000,4,1)").run();
+  db.prepare("INSERT INTO turn_usage VALUES ('sess_a','t2',1789746000000,1789746100000,'cancelled',2000,100,0,0,8000,30000,2,3)").run();
   db.close();
   return path;
 }
