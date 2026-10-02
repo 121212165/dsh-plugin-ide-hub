@@ -76,9 +76,13 @@ test('/hub-init installs the body, the snapshot, and one pointer per rule file',
       ['.hub/STRUCTURE.json', 'created'],
       ['AGENTS.md', 'created'],
       ['CLAUDE.md', 'created'],
+      ['.trae/rules/project_rules.md', 'created'],
+      ['.trae-cn/rules/project_rules.md', 'created'],
     ],
   );
-  assert.deepEqual(result.manual.map((item) => item.tool), ['trae', 'qoder', 'catpaw']);
+  assert.deepEqual(result.manual, [], 'every one of the eight tools now has a verified project-level path');
+  assert.ok(existsSync(join(root, '.trae', 'rules', 'project_rules.md')), 'Trae gets its own rules file because its AGENTS.md support is a settings toggle');
+  assert.ok(existsSync(join(root, '.trae-cn', 'rules', 'project_rules.md')), 'the CN build reads a different rules directory');
 
   const body = readFileSync(join(root, '.hub', 'AGENTS.md'), 'utf8');
   assert.equal(body, renderHubAgents(result.project));
@@ -106,10 +110,12 @@ test('a rerun changes nothing, and the user own rule text survives both ways', (
     [
       ['.hub/AGENTS.md', 'kept'],
       ['.hub/PROJECT_NOTES.md', 'kept'],
-      // the snapshot re-derives from the tree, and the first run just added two root files to it
+      // the snapshot re-derives from the tree, and the first run just added root files to it
       ['.hub/STRUCTURE.json', 'updated'],
       ['AGENTS.md', 'unchanged'],
       ['CLAUDE.md', 'unchanged'],
+      ['.trae/rules/project_rules.md', 'unchanged'],
+      ['.trae-cn/rules/project_rules.md', 'unchanged'],
     ],
   );
   assert.equal(readFileSync(join(root, 'AGENTS.md'), 'utf8'), written, 'pointer files are idempotent down to the byte');
@@ -118,7 +124,7 @@ test('a rerun changes nothing, and the user own rule text survives both ways', (
   assert.ok(refreshed.entries.some((entry) => entry.path === 'AGENTS.md'), 'the snapshot sees what /hub-init just created');
 
   const third = runHubInit(root, { now: NOW });
-  assert.deepEqual(third.changes.map((change) => change.outcome), ['kept', 'kept', 'unchanged', 'unchanged', 'unchanged'], 'with a stable tree a rerun writes nothing');
+  assert.deepEqual(third.changes.map((change) => change.outcome), ['kept', 'kept', 'unchanged', 'unchanged', 'unchanged', 'unchanged', 'unchanged'], 'with a stable tree a rerun writes nothing');
 });
 
 test('--remove leaves zero residue, and refuses to delete anything it did not write', () => {
@@ -132,11 +138,14 @@ test('--remove leaves zero residue, and refuses to delete anything it did not wr
     [
       ['AGENTS.md', 'updated'],
       ['CLAUDE.md', 'removed'],
+      ['.trae/rules/project_rules.md', 'removed'],
+      ['.trae-cn/rules/project_rules.md', 'removed'],
       ['.hub/STRUCTURE.json', 'removed'],
       ['.hub/AGENTS.md', 'kept'],
       ['.hub/PROJECT_NOTES.md', 'removed'],
     ],
   );
+  assert.equal(existsSync(join(root, '.trae')), false, 'an emptied Trae rules tree leaves no residue behind');
   assert.equal(readFileSync(join(root, 'AGENTS.md'), 'utf8'), '# 我的项目规矩\n\n别碰 make。\n');
   assert.equal(existsSync(join(root, 'CLAUDE.md')), false, 'a file that held nothing but our block goes away');
   assert.equal(readFileSync(join(root, '.hub', 'AGENTS.md'), 'utf8'), '# 我改过规则本体了\n', 'user content is never deleted by an uninstall');
@@ -146,7 +155,7 @@ test('--remove leaves zero residue, and refuses to delete anything it did not wr
 test('dry-run reports the same plan without writing a single file', () => {
   const root = project();
   const preview = runHubInit(root, { dryRun: true, now: NOW });
-  assert.equal(preview.changes.length, 5);
+  assert.equal(preview.changes.length, 7);
   assert.ok(preview.changes.every((change) => change.detail.includes('dry-run')), preview.changes.map((c) => c.detail).join(' | '));
   assert.equal(existsSync(join(root, '.hub')), false);
   assert.equal(existsSync(join(root, 'AGENTS.md')), false);

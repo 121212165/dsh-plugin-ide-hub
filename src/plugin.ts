@@ -6,9 +6,9 @@
 import type { Context } from '@deepseek-ai/cordis';
 import Schema from '@deepseek-ai/schemastery';
 import type {} from '@deepseek-ai/dsh-commands';
-import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, readdirSync, rmdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { basename, join, relative, resolve } from 'node:path';
+import { basename, dirname, join, relative, resolve } from 'node:path';
 
 import { defaultRegistry, type IdeSpec } from './hub/registry.ts';
 import { inventory, expandPath, type IdeInventory } from './hub/inventory.ts';
@@ -154,6 +154,28 @@ function mkdirOf(file: string): void {
   mkdirSync(file.replace(/[^\\/]*$/, ''), { recursive: true });
 }
 
+/** Uninstall must not leave a skeleton: an empty directory on the way to a pointer
+ * file goes too — but only while it is empty, and never at or above the project root. */
+function pruneEmptyDirs(file: string, stopAt: string): void {
+  let dir = dirname(file);
+  while (dir.length > stopAt.length && !relative(stopAt, dir).startsWith('..')) {
+    let entries: string[];
+    try {
+      if (!existsSync(dir)) return;
+      entries = readdirSync(dir);
+    } catch {
+      return;
+    }
+    if (entries.length) return;
+    try {
+      rmdirSync(dir);
+    } catch {
+      return;
+    }
+    dir = dirname(dir);
+  }
+}
+
 /** Content-compare write: a rerun that changes nothing must not touch the file. */
 function writeIfChanged(file: string, content: string): FileOutcome {
   const existing = readIf(file);
@@ -219,6 +241,7 @@ export function runHubInit(root: string, options: HubInitOptions = {}): HubInitR
       }
       if (deleteFile) {
         rmSync(file, { force: true });
+        pruneEmptyDirs(file, root);
         changes.push({ file: target.path, outcome: 'removed', detail: '除指针段外没有内容，已删除' });
       } else {
         writeFileSync(file, content, 'utf8');

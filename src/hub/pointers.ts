@@ -3,9 +3,7 @@
  *
  * Everything here is pure: it takes the existing file contents in and hands the
  * bytes to write back out, so idempotency, "never clobber the user", and the
- * zero-residue uninstall are testable without touching a disk. Where a tool's
- * project-level rule path has not been verified on this machine, it is reported
- * as a manual step instead of guessing at a file to create.
+ * zero-residue uninstall are testable without touching a disk.
  */
 
 export const POINTER_BEGIN = '<!-- hub-pointer:start dsh-plugin-ide-hub v1 -->';
@@ -22,18 +20,24 @@ export interface PointerSpec {
   note: string;
 }
 
-/** AGENTS.md at the project root is the shared convention the CLI agents in this
- * family all read, so one file covers five tools. The IDE-specific rule paths of
- * Trae / Qoder / CatPaw were never verified here, so they stay manual. */
+/** Every path below was read out of the installed vendor binary on this machine
+ * (2026-10-02), not from docs. Project-root AGENTS.md is the shared convention the
+ * four CLI tools read, and Qoder's and CatPaw's runtimes look it up too, so one
+ * file covers seven of the eight. Trae is the exception: its project-root AGENTS.md
+ * support is a settings toggle ("Include AGENTS.md in the context"), so it gets its
+ * own rules file — and the installed CN build ships a second rules directory, hence
+ * two Trae entries.
+ */
 export const POINTER_SPECS: readonly PointerSpec[] = [
   { tool: 'codex', path: 'AGENTS.md', mode: 'block', note: 'codex 读项目根 AGENTS.md' },
   { tool: 'opencode', path: 'AGENTS.md', mode: 'block', note: 'opencode 读项目根 AGENTS.md' },
   { tool: 'zcode', path: 'AGENTS.md', mode: 'block', note: 'zcode 读项目根 AGENTS.md（其全局规则在 ~/.zcode/cli/AGENTS.md，本处只挂项目级）' },
   { tool: 'dsh', path: 'AGENTS.md', mode: 'block', note: 'dsh 读项目根 AGENTS.md' },
+  { tool: 'qoder', path: 'AGENTS.md', mode: 'block', note: 'Qoder 的 agent 运行时按 AGENTS.override.md → AGENTS.md 逐级向上找项目根文件' },
+  { tool: 'catpaw', path: 'AGENTS.md', mode: 'block', note: 'CatPaw 的 loadAgentMdFiles 从工作目录向上找 AGENTS.md；它的 .catpaw/rules/ 目录名可被 CATPAW_DIR 覆盖，所以不依赖它' },
   { tool: 'claude-code', path: 'CLAUDE.md', mode: 'block', note: 'Claude Code 读项目根 CLAUDE.md' },
-  { tool: 'trae', path: '', mode: 'manual', note: 'Trae 的项目级规则文件路径未在本机核实——请手工把 .hub/AGENTS.md 指进去' },
-  { tool: 'qoder', path: '', mode: 'manual', note: 'Qoder 的项目级规则文件路径未在本机核实——请手工把 .hub/AGENTS.md 指进去' },
-  { tool: 'catpaw', path: '', mode: 'manual', note: 'CatPaw 的项目级规则文件路径未在本机核实——请手工把 .hub/AGENTS.md 指进去' },
+  { tool: 'trae', path: '.trae/rules/project_rules.md', mode: 'block', note: 'Trae 读 .trae/rules/project_rules.md；它对项目根 AGENTS.md 的支持是设置里的开关，不能默认依赖' },
+  { tool: 'trae', path: '.trae-cn/rules/project_rules.md', mode: 'block', note: '本机装的 TRAE SOLO CN 同时使用 .trae-cn/rules/，两条都挂才不管哪个构建都生效' },
 ];
 
 /** The rule body every pointer refers to. Relative paths keep it portable. */
@@ -172,8 +176,9 @@ export function renderHubAgents(project: string): string {
     '',
     '下面这些文件里各有本插件写入的一段指针（有 `hub-pointer` 标记）：',
     '',
-    '- `AGENTS.md`（codex / opencode / zcode / dsh 共用）',
+    '- `AGENTS.md`（codex / opencode / zcode / dsh / qoder / catpaw 共用）',
     '- `CLAUDE.md`（Claude Code）',
+    '- `.trae/rules/project_rules.md` 与 `.trae-cn/rules/project_rules.md`（Trae；它的国际版与 CN 构建各读一条）',
     '',
     '卸载：`/hub-init --remove` 会精确删掉这些段与 `.hub/` 目录，用户在同一个文件里自己写的内容原样保留。',
     '',

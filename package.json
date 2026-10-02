@@ -1,6 +1,6 @@
 {
   "name": "dsh-plugin-ide-hub",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "description": "dsh plugin: unified manager across coding IDEs (Trae/Qoder/ZCode/CatPaw/Codex/Claude Code/OpenCode/dsh) — session inventory, quota migration planning, shared prompt-rules registry, Obsidian knowledge export.",
   "type": "module",
   "license": "MIT",

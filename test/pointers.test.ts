@@ -79,28 +79,29 @@ test('uninstall lifts the block out and reports files that can be deleted', () =
 });
 
 test('the adapter table groups five tools onto one file and keeps the unverified ones manual', () => {
-  assert.deepEqual(POINTER_SPECS.map((spec) => `${spec.tool}:${spec.mode}`).sort(), [
-    'catpaw:manual',
-    'claude-code:block',
-    'codex:block',
-    'dsh:block',
-    'opencode:block',
-    'qoder:manual',
-    'trae:manual',
-    'zcode:block',
+  assert.deepEqual(POINTER_SPECS.map((spec) => `${spec.tool}:${spec.path}`).sort(), [
+    'catpaw:AGENTS.md',
+    'claude-code:CLAUDE.md',
+    'codex:AGENTS.md',
+    'dsh:AGENTS.md',
+    'opencode:AGENTS.md',
+    'qoder:AGENTS.md',
+    'trae:.trae-cn/rules/project_rules.md',
+    'trae:.trae/rules/project_rules.md',
+    'zcode:AGENTS.md',
   ]);
+  assert.ok(POINTER_SPECS.every((spec) => spec.mode === 'block'), 'no tool is left as a manual handoff');
+  assert.ok(POINTER_SPECS.some((spec) => spec.tool === 'trae' && spec.note.includes('开关')), 'Trae needs its own file because AGENTS.md is opt-in there');
 
   const { block, manual } = pointerTargets();
-  assert.deepEqual(block.map((target) => target.path), ['AGENTS.md', 'CLAUDE.md'], 'one write per file, not per tool');
+  assert.deepEqual(block.map((target) => target.path), ['AGENTS.md', 'CLAUDE.md', '.trae/rules/project_rules.md', '.trae-cn/rules/project_rules.md'], 'one write per file, not per tool');
   const agents = block.find((target) => target.path === 'AGENTS.md')!;
-  assert.deepEqual(agents.tools, ['codex', 'opencode', 'zcode', 'dsh']);
-  assert.equal(agents.notes.length, 4, 'each tool keeps its own reason');
-  assert.deepEqual(manual.map((spec) => spec.tool), ['trae', 'qoder', 'catpaw']);
-  assert.ok(manual.every((spec) => spec.note.includes('未在本机核实')), 'manual means we say so, not that we guess');
+  assert.deepEqual(agents.tools, ['codex', 'opencode', 'zcode', 'dsh', 'qoder', 'catpaw'], 'six tools share the one project-root file');
+  assert.equal(agents.notes.length, 6, 'each tool keeps its own reason');
+  assert.deepEqual(manual, []);
 
   const subset = pointerTargets(['claude-code', 'trae']);
-  assert.deepEqual(subset.block.map((target) => target.path), ['CLAUDE.md']);
-  assert.deepEqual(subset.manual.map((spec) => spec.tool), ['trae']);
+  assert.deepEqual(subset.block.map((target) => target.path), ['CLAUDE.md', '.trae/rules/project_rules.md', '.trae-cn/rules/project_rules.md']);
   assert.deepEqual(pointerTargets([]), { block: [], manual: [] });
   assert.deepEqual(pointerTargets(['nonexistent-ide']), { block: [], manual: [] });
 });
