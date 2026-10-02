@@ -1,12 +1,13 @@
 # dsh-plugin-ide-hub
 
-**EN** · One hub over the coding IDEs you actually run — dsh, Claude Code, Codex, ZCode, Qoder, CatPaw, Trae, OpenCode. It reads each tool's own on-disk state (sessions, usage, prompt-rule files) instead of calling any API, then gives you an inventory (`/ide-hub`), a quota-runway migration plan (`/hub-migrate`), usage breakdowns (`/hub-usage`), resumable sessions (`/hub-sessions`) and an Obsidian export (`/hub-export`). · 24 `node --test` green · reads real local data on this machine · v0.4's Trae chat reader is **not yet wired into `/hub-sessions`** — see 已知边界.
+**EN** · One hub over the coding IDEs you actually run — dsh, Claude Code, Codex, ZCode, Qoder, CatPaw, Trae, OpenCode. It reads each tool's own on-disk state (sessions, usage, prompt-rule files) instead of calling any API, then gives you an inventory (`/ide-hub`), a quota-runway migration plan (`/hub-migrate`), usage breakdowns (`/hub-usage`), resumable sessions (`/hub-sessions`) and an Obsidian export (`/hub-export`) — and, since `/hub-init`, writes back exactly one thing: a `.hub/` rule body plus a marker-delimited pointer in each tool's project rule file. · 36 `node --test` green · reads real local data on this machine · v0.4's Trae chat reader is **not yet wired into `/hub-sessions`** — see 已知边界.
 
-DeepSeek Harness (dsh) 插件：跨 IDE 统一管理器。各家编码 IDE 都把会话、用量、提示词规则写在自己的磁盘目录里，本插件直接读这些文件（不调任何厂商 API），在 dsh 里出五个命令。
+DeepSeek Harness (dsh) 插件：跨 IDE 统一管理器。各家编码 IDE 都把会话、用量、提示词规则写在自己的磁盘目录里，本插件直接读这些文件（不调任何厂商 API），在 dsh 里出六个命令。读之外只有一处写：`/hub-init` 往**你自己指定的项目目录**里装 `.hub/` 规则本体与各 IDE 的指针段。
 
 ## 功能
 
 - **`/ide-hub`**：8 个适配器的在装盘点（`N/8 在装，其中国产 M`）+ 每个工具的提示词规则文件发现（CLAUDE.md / AGENTS.md / .cursorrules 一类）。
+- **`/hub-init [目录] [--dry-run] [--only …] [--remove]`**：指针生成器。建 `.hub/AGENTS.md`（规则本体，一份正文多处生效）+ `.hub/PROJECT_NOTES.md` + `.hub/STRUCTURE.json`（深度 2 的结构快照），再往项目根的 `AGENTS.md`（codex/opencode/zcode/dsh 共用）与 `CLAUDE.md`（Claude Code）里放一段用 `hub-pointer` 标记包住的指针。**Trae / Qoder / CatPaw 的项目级规则路径本机未核实，所以只打印人工接手步骤，不替你猜一个文件写**。
 - **`/hub-usage`**：用量。zcode 走本地 `model_usage` 库，出总量、轮数、缓存命中率、非完成态与工具错误数，并按 `provider/model` 逐行拆；claude-code / codex 走各自转录统计。
 - **`/hub-sessions`**：最近会话列表 + 一键恢复命令（`claude --resume …` / `codex resume …` / `dsh --profile … --resume …`）。
 - **`/hub-migrate`**：配额迁移计划。按你配的 `remainingMajor` / `dailyMajor` / `priority` 算每个工具的耗尽倒计时，并给出该把活优先挪给谁。
@@ -38,6 +39,13 @@ dsh plugin --profile web add github:121212165/dsh-plugin-ide-hub
 | `vaultDir` | 无 | `/hub-export` 的目标 Obsidian 库；不配则该命令直接报错而不是猜路径 |
 | `quotas` | `[]` | `/hub-migrate` 的输入，每项 `{tool, remainingMajor, dailyMajor, priority}`；`priority` 取 `work`/`batch`/`learning` |
 
+## 写盘原则（一个只读插件第一次往磁盘上写东西）
+
+- **只写进你点名的项目目录**，绝不碰 `~/.claude`、`~/.codex` 这类全局规则文件。
+- **不覆盖别人的正文**：目标文件已有内容时只在末尾**追加**一段带标记的指针；`.hub/AGENTS.md` 与 `PROJECT_NOTES.md` 一旦存在就永不改写（`= 保留`），只有 `STRUCTURE.json` 是纯生成物、每次重算。
+- **幂等**：再跑一次不产生第二个指针段、不改字节（测试断言到 byte 级）；`--dry-run` 报同样的计划但零写盘。
+- **卸载零残留**：`/hub-init --remove` 精确摘掉自己那段，摘完发现文件里没别的内容才删文件；`.hub` 里被你自己改过的模板**不删**，只告诉你它还在、请你确认后手工删。
+
 ## 数据口径（为什么有些数字拿不到）
 
 - 只用磁盘上的**公开事实**：目录、`*.jsonl`、SQLite 里已存在的 usage 字段。不解析任何私有消息体格式，也不逆向加密内容。
@@ -46,7 +54,7 @@ dsh plugin --profile web add github:121212165/dsh-plugin-ide-hub
 
 ## 验证状态
 
-- 24 个 `node --test` 全绿（`inventory` / `usage` / `zcode-db` / `obsidian` / `migrate` 五个文件），含损坏行容错与跨月/边界用例。
+- 36 个 `node --test` 全绿（`inventory` / `usage` / `zcode-db` / `obsidian` / `migrate` / `pointers` / `hub-init` 七个文件），含损坏行容错与跨月/边界用例。`hub-init` 那组是真临时目录上的端到端：安装、二次运行 byte 级不变、`--remove` 的"该删的删/该留的留"、`--only` 收窄、坏输入点名报错。
 - `/hub-usage` 的 zcode 明细、`/ide-hub` 的盘点数字来自本机真实目录，实测跑得出数据。
 - **未做**：v0.4 的 Trae 聊天读取未在运行中的 dsh 里 live mount 复验。
 
@@ -62,6 +70,6 @@ dsh plugin --profile web add github:121212165/dsh-plugin-ide-hub
 |---|---|---|
 | [stablyai/orca](https://github.com/stablyai/orca)（82k★，ADE） | ①「读各 agent 写在磁盘上的限额/用量状态，不调 API」的用量追踪思路（usage-tracking）；②「扫描全机会话转录 + 按 CLI 映射 resume 命令」的会话历史模式（session-history） | Orca 只覆盖 18 个海外 CLI；本插件补齐国产 IDE（Trae/Qoder/CatPaw）与 dsh 的适配位，且不解析私有消息格式（只做目录级事实+公开 jsonl 的 usage 字段）。代码为独立实现，未复制 Orca 源码 |
 | [ccusage](https://github.com/ccusage/ccusage)、[splitrail](https://github.com/Piebald-AI/splitrail) | 本地 JSONL 用量统计的可行性验证 | ccusage 只读 Claude 格式；splitrail 不含国产 IDE。我们的聚合是自己的实现，口径（按工具/日/模型）独立设计 |
-| [kaanozhan/Frame](https://github.com/kaanozhan/Frame)（ADE，394★） | 「指针文件路由」思想已列入 v0.2 计划（一份 `.hub/` 本体 + 每 IDE 一根指针），**尚未实现**，实现时将重新设计而非照搬 | — |
+| [kaanozhan/Frame](https://github.com/kaanozhan/Frame)（ADE，394★） | 「指针文件路由」思想（一份本体 + 每 IDE 一根指针） | 已按本仓库口径实现为 `/hub-init`（v0.5）：指针段带标记可精确卸载、只写项目目录不碰全局、未核实路径的工具一律降级为人工步骤——不是照搬其文件布局 |
 
 明确原创（无对应借鉴源）：迁移计划算法（耗尽倒计时+优先级跑位）、fact-vault、pinboard 的预算注入模型、eco-scan 的增长评分。
