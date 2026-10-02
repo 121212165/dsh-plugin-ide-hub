@@ -1,6 +1,6 @@
 # dsh-plugin-ide-hub
 
-**EN** · One hub over the coding IDEs you actually run — dsh, Claude Code, Codex, ZCode, Qoder, CatPaw, Trae, OpenCode. It reads each tool's own on-disk state (sessions, usage, prompt-rule files) instead of calling any API, then gives you an inventory (`/ide-hub`), a quota-runway migration plan (`/hub-migrate`), usage breakdowns (`/hub-usage`), resumable sessions (`/hub-sessions`) and an Obsidian export (`/hub-export`) — and, since `/hub-init`, writes back exactly one thing: a `.hub/` rule body plus a marker-delimited pointer in each tool's project rule file. · 36 `node --test` green · reads real local data on this machine · v0.4's Trae chat reader is **not yet wired into `/hub-sessions`** — see 已知边界.
+**EN** · One hub over the coding IDEs you actually run — dsh, Claude Code, Codex, ZCode, Qoder, CatPaw, Trae, OpenCode. It reads each tool's own on-disk state (sessions, usage, prompt-rule files) instead of calling any API, then gives you an inventory (`/ide-hub`), a quota-runway migration plan (`/hub-migrate`), usage breakdowns (`/hub-usage`), resumable sessions (`/hub-sessions`), a ranked "what should I do first" over the sibling plugins (`/today`) and an Obsidian export (`/hub-export`) — and, since `/hub-init`, writes back exactly one thing: a `.hub/` rule body plus a marker-delimited pointer in each tool's project rule file. · 45 `node --test` green · reads real local data on this machine · v0.4's Trae chat reader is **not yet wired into `/hub-sessions`** — see 已知边界.
 
 DeepSeek Harness (dsh) 插件：跨 IDE 统一管理器。各家编码 IDE 都把会话、用量、提示词规则写在自己的磁盘目录里，本插件直接读这些文件（不调任何厂商 API），在 dsh 里出六个命令。读之外只有一处写：`/hub-init` 往**你自己指定的项目目录**里装 `.hub/` 规则本体与各 IDE 的指针段。
 
@@ -10,6 +10,7 @@ DeepSeek Harness (dsh) 插件：跨 IDE 统一管理器。各家编码 IDE 都�
 - **`/hub-init [目录] [--dry-run] [--only …] [--remove]`**：指针生成器。建 `.hub/AGENTS.md`（规则本体，一份正文多处生效）+ `.hub/PROJECT_NOTES.md` + `.hub/STRUCTURE.json`（深度 2 的结构快照），再往项目根的 `AGENTS.md`（codex/opencode/zcode/dsh 共用）与 `CLAUDE.md`（Claude Code）里放一段用 `hub-pointer` 标记包住的指针。**Trae / Qoder / CatPaw 的项目级规则路径本机未核实，所以只打印人工接手步骤，不替你猜一个文件写**。
 - **`/hub-usage`**：用量。zcode 走本地 `model_usage` 库，出总量、轮数、缓存命中率、非完成态与工具错误数，并按 `provider/model` 逐行拆；claude-code / codex 走各自转录统计。
 - **`/hub-sessions`**：最近会话列表 + 一键恢复命令（`claude --resume …` / `codex resume …` / `dsh --profile … --resume …`）。
+- **`/today`**：**今天第一件事**。把四个兄弟插件写在磁盘上的事实汇成一个排序结论——quota 的 `summary.json`（预算与下步预估）、cost-ledger 的当月台账、task-forge 的 `ledger.jsonl`（谁卡在等谁）、tool-trace 的调用记录（连败=系统性故障）。规则表在 `src/hub/today.ts`，是纯函数、逐条有测试；读不到哪个文件就在输出里点名「看不到的部分」，不假装全知。
 - **`/hub-migrate`**：配额迁移计划。按你配的 `remainingMajor` / `dailyMajor` / `priority` 算每个工具的耗尽倒计时，并给出该把活优先挪给谁。
 - **`/hub-export`**：把盘点结果与规则文件导出成 Obsidian 笔记（`IDE-Hub/` 子树），未变化的文件跳过。
 
@@ -37,7 +38,24 @@ dsh plugin --profile web add github:121212165/dsh-plugin-ide-hub
 |---|---|---|
 | `enabled` | `true` | |
 | `vaultDir` | 无 | `/hub-export` 的目标 Obsidian 库；不配则该命令直接报错而不是猜路径 |
+| `quotaSummaryPath` | `~/.dsh/quota/summary.json` | `/today` 读它（预算、下步预估） |
+| `costLedgerDir` | `~/.dsh/cost-ledger` | `/today` 读当月 `ledger-YYYY-MM.jsonl` |
+| `taskForgeLedger` | `~/.dsh/task-forge/ledger.jsonl` | `/today` 读交接台账 |
+| `toolTraceDir` | `~/.dsh/tool-trace` | `/today` 读工具追踪，窗口 `todayWindowDays` |
 | `quotas` | `[]` | `/hub-migrate` 的输入，每项 `{tool, remainingMajor, dailyMajor, priority}`；`priority` 取 `work`/`batch`/`learning` |
+
+## /today 的优先级（为什么是这个顺序）
+
+规则表只有 6 条，顺序是**"现在能不能干活" > "钱" > "别人在等我的东西" > "我在等别人的东西" > "可以开工了"**：
+
+1. tool-trace 里有工具**连败 ≥ 3**（与 error-radar 同阈值）→ 先修工具链：这条路现在就是走不通，别派活；
+2. quota 预算 ≥ 80%，或**最热会话 + 下步预估 > 预算** → 先谈钱，因为这是不可逆的；
+3. 有任务的回读列了缺口（`缺口 N 条`）→ 那是**别人在等你答**，答完版本才推进；
+4. `relayed` 超过 24 小时没人 `/ack` → 催回读（未到 24 小时不算卡住，只列出来）；
+5. 有 `ready`/`in-progress` → 让它开工；
+6. 都没有 → "没有阻塞，可以开新需求"，指向 `/forge`。
+
+本月花费（`/forecast`）永远列在最后：它是"想看再看"的信息，不该压过阻塞项。窗口默认 3 天（`todayWindowDays`），窗口外的数字不算"现在的健康"。
 
 ## 写盘原则（一个只读插件第一次往磁盘上写东西）
 
@@ -54,7 +72,7 @@ dsh plugin --profile web add github:121212165/dsh-plugin-ide-hub
 
 ## 验证状态
 
-- 36 个 `node --test` 全绿（`inventory` / `usage` / `zcode-db` / `obsidian` / `migrate` / `pointers` / `hub-init` 七个文件），含损坏行容错与跨月/边界用例。`hub-init` 那组是真临时目录上的端到端：安装、二次运行 byte 级不变、`--remove` 的"该删的删/该留的留"、`--only` 收窄、坏输入点名报错。
+- 45 个 `node --test` 全绿（`inventory` / `usage` / `zcode-db` / `obsidian` / `migrate` / `pointers` / `hub-init` / `today` 八个文件），含损坏行容错、跨月边界，以及 `/today` 六条规则的相对顺序与各来源缺失时的降级。`hub-init` 那组是真临时目录上的端到端：安装、二次运行 byte 级不变、`--remove` 的"该删的删/该留的留"、`--only` 收窄、坏输入点名报错。
 - `/hub-usage` 的 zcode 明细、`/ide-hub` 的盘点数字来自本机真实目录，实测跑得出数据。
 - **未做**：v0.4 的 Trae 聊天读取未在运行中的 dsh 里 live mount 复验。
 

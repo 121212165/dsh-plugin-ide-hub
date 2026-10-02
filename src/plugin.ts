@@ -25,6 +25,8 @@ import {
   type TreeEntry,
 } from './hub/pointers.ts';
 import { planMigration, renderPlan, type QuotaState } from './hub/migrate.ts';
+import { prioritiseToday, renderToday, type TodaySignals } from './hub/today.ts';
+import { readBudget, readSpend, readTasks, readTools } from './hub/today-readers.ts';
 import { discoverRules, renderInventoryNote, renderMigrationNote, renderRulesNotes, writeNotes, type RuleFileInfo } from './hub/obsidian.ts';
 import { scanClaudeCode, scanCodex, aggregate, renderUsage, recentSessions, type UsageRecord } from './hub/usage.ts';
 import { readZcodeUsage, readZcodeSessions, readZcodeModels, zcodeStats, type ZcodeUsageRecord } from './hub/zcode-db.ts';
@@ -40,10 +42,24 @@ export interface QuotaConfig {
   priority: 'work' | 'batch' | 'learning';
 }
 
+/** Where each /today signal lives when the host does not override it. */
+export const TODAY_DEFAULTS = {
+  quotaSummaryPath: '~/.dsh/quota/summary.json',
+  costLedgerDir: '~/.dsh/cost-ledger',
+  taskForgeLedger: '~/.dsh/task-forge/ledger.jsonl',
+  toolTraceDir: '~/.dsh/tool-trace',
+  todayWindowDays: 3,
+} as const;
+
 export interface Config {
   enabled: boolean;
   vaultDir?: string;
   quotas: QuotaConfig[];
+  quotaSummaryPath?: string;
+  costLedgerDir?: string;
+  taskForgeLedger?: string;
+  toolTraceDir?: string;
+  todayWindowDays?: number;
 }
 
 export const Config = Schema.object({
@@ -57,6 +73,11 @@ export const Config = Schema.object({
       priority: Schema.union([Schema.const('work'), Schema.const('batch'), Schema.const('learning')]).default('work'),
     }),
   ).default([]),
+  quotaSummaryPath: Schema.string().default(TODAY_DEFAULTS.quotaSummaryPath),
+  costLedgerDir: Schema.string().default(TODAY_DEFAULTS.costLedgerDir),
+  taskForgeLedger: Schema.string().default(TODAY_DEFAULTS.taskForgeLedger),
+  toolTraceDir: Schema.string().default(TODAY_DEFAULTS.toolTraceDir),
+  todayWindowDays: Schema.natural().default(TODAY_DEFAULTS.todayWindowDays),
 });
 
 function humanBytes(bytes: number): string {
@@ -280,6 +301,13 @@ export function apply(ctx: Context, config: Config): void {
   const log = ctx.logger('ide-hub');
   if (!config.enabled) return void log.info('disabled by config');
   const registry: IdeSpec[] = defaultRegistry();
+  const windowDays = config.todayWindowDays && config.todayWindowDays > 0 ? config.todayWindowDays : TODAY_DEFAULTS.todayWindowDays;
+  const paths = {
+    quota: config.quotaSummaryPath || TODAY_DEFAULTS.quotaSummaryPath,
+    ledger: config.costLedgerDir || TODAY_DEFAULTS.costLedgerDir,
+    tasks: config.taskForgeLedger || TODAY_DEFAULTS.taskForgeLedger,
+    trace: config.toolTraceDir || TODAY_DEFAULTS.toolTraceDir,
+  };
 
   ctx.commands.register({
     name: 'ide-hub',
@@ -391,5 +419,21 @@ export function apply(ctx: Context, config: Config): void {
     },
   });
 
-  log.info(`mounted · ${registry.length} ide adapters`);
+  ctx.commands.register({
+    name: 'today',
+    description: '今天第一件事：把 quota 预算 / cost-ledger 花费 / task-forge 交接 / 工具健康 汇成一个排序结论（规则表见 src/hub/today.ts）',
+    handler: () => {
+      const now = new Date();
+      const signals: TodaySignals = {
+        now,
+        budget: readBudget(expandPath(paths.quota)),
+        spend: readSpend(expandPath(paths.ledger), now),
+        tasks: readTasks(expandPath(paths.tasks)),
+        tools: readTools(expandPath(paths.trace), now, windowDays),
+      };
+      return { kind: 'success', text: renderToday(prioritiseToday(signals), signals) };
+    },
+  });
+
+  log.info(`mounted · ${registry.length} ide adapters · today sources wired`);
 }
