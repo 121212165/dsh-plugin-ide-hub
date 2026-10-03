@@ -17,7 +17,7 @@ DeepSeek Harness (dsh) 插件：跨 IDE 统一管理器。各家编码 IDE 都�
 
 ## 安装
 
-三步，实测于 `@deepseek-ai/dsh@0.1.7-alpha.1`（需 `pnpm` 在 PATH 上）：
+三步，2026-10-03 在**全新 `DSH_HOME`** 上按本文档重跑通过（`@deepseek-ai/dsh@0.2.0-rc.2` + `pnpm 10.20.0`）：
 
 ```sh
 # ① 装进 profile：dsh plugin 把参数原样转发给 pnpm，git 包会自动跑 prepare 构建 lib/
@@ -32,6 +32,33 @@ dsh plugin --profile web add github:121212165/dsh-plugin-ide-hub
 ③ 重启 dsh。配置层与 client 半都要重启才生效（客户端按 boot 时算出的内容 rev 下发，硬刷新浏览器没用）。
 
 自检挂载：`dsh --profile web --dump-config | grep dsh-plugin-ide-hub`，应看到该条目。
+
+### 装不上时先查这三样（2026-10-03 干净房实测踩点）
+
+1. **git 走了死代理**：pnpm 内部会调 `git ls-remote https://github.com/…`。若你 git 全局配了
+   `http.proxy` 而那代理已经不在了，报 `TLS connect error: error:0A000126:SSL routines::unexpected eof`——
+   而同一时刻**直连 github 是 200**，所以别怀疑 GitHub。临时绕过（不动你的全局配置）：
+
+   ```sh
+   export GIT_CONFIG_COUNT=2 \
+     GIT_CONFIG_KEY_0=http.proxy  GIT_CONFIG_VALUE_0= \
+     GIT_CONFIG_KEY_1=https.proxy GIT_CONFIG_VALUE_1=
+   ```
+
+   永久修法自己定：`git config --global --unset http.proxy`（并 unset `https.proxy`）。
+2. **pnpm 拦构建脚本**：git 包要在安装时跑 `prepare` 生成 `lib/`。`pnpm 10.20.0` 实测直接放行；
+   若你的版本拦了，按 dsh 的报错提示在 `profiles/web/pnpm-workspace.yaml` 的 `allowBuilds`
+   里加上包名再重跑同一条 `dsh plugin … add`。
+3. **`missing peer @deepseek-ai/cordis@>=4.0.0` 是预期噪音**：cordis 由宿主 profile 提供，不用补装。
+
+**装完立刻可用的含义**：只要 `bundles` 里有 `dsh-plugin-ide-hub`，它就会以 `config: {enabled: true}` 挂载，
+`/hub-init` 与 `/today` 直接可用；上面第 ② 步的 `cordis.patch.yml` 只是往里加配置项（`vaultDir` 之类），
+不配不影响主功能。确认到"真的挂上且带默认配置"：
+
+```sh
+dsh --profile web --dump-config | grep -A2 dsh-plugin-ide-hub
+# → - id: ide-hub / name: dsh-plugin-ide-hub / config: / enabled: true
+```
 
 ## 配置
 
