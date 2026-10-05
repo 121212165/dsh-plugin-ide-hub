@@ -64,6 +64,20 @@ export interface SessionsSignal {
   costMicros: number;
 }
 
+/** spend-forecast's published forecast.json — the burn-out date /today acts on. */
+export interface ForecastSignal {
+  updatedAt: string;
+  currency: string;
+  dailyRateMicros: number;
+  trend: string;
+  month: string;
+  spentThisMonthMicros: number;
+  projectedMonthEndMajor: number;
+  budgetMajor: number | null;
+  daysUntilBudget: number | null;
+  budgetExhaustionDate: string | null;
+}
+
 export interface TodaySignals {
   now: Date;
   budget: BudgetSignal | null;
@@ -72,6 +86,7 @@ export interface TodaySignals {
   tools: ToolSignal | null;
   /** optional so older signal snapshots stay valid; null/absent = blind spot */
   sessions?: SessionsSignal | null;
+  forecast?: ForecastSignal | null;
 }
 
 export interface TodayAction {
@@ -100,6 +115,8 @@ export const TODAY_RULES = {
   streakAlert: 3,
   /** error-rate line, fraction (error-radar's default 20%) */
   errorRateAlert: 0.2,
+  /** daysUntilBudget at or below which the burn-out becomes an action */
+  burnSoonDays: 7,
 };
 
 const HOUR = 3_600_000;
@@ -213,6 +230,7 @@ export function prioritiseToday(signals: TodaySignals): TodayPlan {
   if (!signals.spend) blind.push('cost-ledger 台账（本月花费）');
   if (!signals.tools) blind.push('tool-trace 追踪（工具面健康）');
   if (!signals.sessions) blind.push('session-insights 侧车（跨会话统计）');
+  if (!signals.forecast) blind.push('spend-forecast 的 forecast.json（烧穿日期）');
   // an empty task ledger is a fact, not a blind spot — the 依据 line says 0 个任务
 
   if (signals.tools?.streaks.length) {
@@ -281,6 +299,17 @@ export function prioritiseToday(signals: TodaySignals): TodayPlan {
         command: '/forge <大白话需求>',
       });
     }
+  }
+
+  const forecast = signals.forecast;
+  const burnSoon = forecast?.daysUntilBudget;
+  if (burnSoon !== null && burnSoon !== undefined && burnSoon <= rules.burnSoonDays) {
+    const trendText = forecast!.trend === 'accelerating' ? '且在加速' : forecast!.trend === 'easing' ? '，好在在降温' : '';
+    actions.push({
+      do: burnSoon <= 0 ? `本月预算已按当前速率烧穿（推算于 ${forecast!.budgetExhaustionDate ?? forecast!.updatedAt.slice(0, 10)}）：只留必要开支` : `本月预算 ${burnSoon} 天后烧穿（${forecast!.budgetExhaustionDate}）：省着花${trendText}`,
+      why: `spend-forecast 按短窗日均 ${money(forecast!.dailyRateMicros, forecast!.currency)} 推算，本月已花 ${money(forecast!.spentThisMonthMicros, forecast!.currency)}`,
+      command: '/forecast',
+    });
   }
 
   if (signals.spend && signals.spend.records) {

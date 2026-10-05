@@ -7,7 +7,7 @@
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { foldTasks, foldTools, foldSessions, type BudgetSignal, type SessionsSignal, type SpendSignal, type TaskSignal, type ToolSignal } from './today.ts';
+import { foldTasks, foldTools, foldSessions, type BudgetSignal, type ForecastSignal, type SessionsSignal, type SpendSignal, type TaskSignal, type ToolSignal } from './today.ts';
 
 function whole(value: unknown): number | null {
   return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : null;
@@ -139,4 +139,29 @@ export function readSessions(dir: string, now: Date, days: number): SessionsSign
   const fresh = rows.filter((row) => typeof row.at === 'string' && Number.isFinite(Date.parse(row.at)) && Date.parse(row.at as string) >= since);
   if (!fresh.length) return null;
   return foldSessions(fresh);
+}
+
+/** spend-forecast's published forecast.json — the burn-out signal. */
+export function readForecast(file: string): ForecastSignal | null {
+  const value = readJsonFile(file);
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const row = value as Record<string, unknown>;
+  if (row.v !== 1) return null;
+  if (typeof row.updatedAt !== 'string' || !Number.isFinite(Date.parse(row.updatedAt))) return null;
+  if (typeof row.currency !== 'string' || !row.currency) return null;
+  const dailyRateMicros = whole(row.dailyRateMicros);
+  if (dailyRateMicros === null) return null;
+  const num = (key: string): number | null => (typeof row[key] === 'number' && Number.isFinite(row[key]) ? (row[key] as number) : null);
+  return {
+    updatedAt: row.updatedAt,
+    currency: row.currency,
+    dailyRateMicros,
+    trend: typeof row.trend === 'string' ? row.trend : 'unknown',
+    month: typeof row.month === 'string' ? row.month : '',
+    spentThisMonthMicros: num('spentThisMonthMicros') ?? 0,
+    projectedMonthEndMajor: num('projectedMonthEndMajor') ?? 0,
+    budgetMajor: num('budgetMajor'),
+    daysUntilBudget: num('daysUntilBudget'),
+    budgetExhaustionDate: typeof row.budgetExhaustionDate === 'string' ? row.budgetExhaustionDate : null,
+  };
 }

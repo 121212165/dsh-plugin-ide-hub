@@ -9,7 +9,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { foldTasks, foldTools, foldSessions, money, prioritiseToday, renderToday, TODAY_RULES, type TodaySignals } from '../src/hub/today.ts';
-import { readBudget, readSessions, readSpend, readTasks, readTools } from '../src/hub/today-readers.ts';
+import { readBudget, readForecast, readSessions, readSpend, readTasks, readTools } from '../src/hub/today-readers.ts';
 import { apply } from '../src/plugin.ts';
 
 const NOW = new Date('2026-10-02T12:00:00.000Z');
@@ -155,8 +155,8 @@ test('the render names its blind spots instead of implying full sight', () => {
     assert.ok(blind.includes(source), `missing source not named: ${source}`);
   }
   const seen = renderToday(
-    prioritiseToday(signals({ budget: { updatedAt: NOW.toISOString(), budgetTokens: 100_000, maxSessionTokens: 90_000, maxSessionRatio: 0.9, nextTurnEstTokens: 20_000, currency: 'CNY' }, spend: { monthMicros: 1_000, currency: 'CNY', records: 2, sessions: 1 }, tools: foldTools([traceLine('read', false, 1)]), tasks: [], sessions: { sessions: 2, records: 5, tokens: 40_000, costMicros: 0 } })),
-    signals({ budget: { updatedAt: NOW.toISOString(), budgetTokens: 100_000, maxSessionTokens: 90_000, maxSessionRatio: 0.9, nextTurnEstTokens: 20_000, currency: 'CNY' }, spend: { monthMicros: 1_000, currency: 'CNY', records: 2, sessions: 1 }, tools: foldTools([traceLine('read', false, 1)]), tasks: [], sessions: { sessions: 2, records: 5, tokens: 40_000, costMicros: 0 } }),
+    prioritiseToday(signals({ budget: { updatedAt: NOW.toISOString(), budgetTokens: 100_000, maxSessionTokens: 90_000, maxSessionRatio: 0.9, nextTurnEstTokens: 20_000, currency: 'CNY' }, spend: { monthMicros: 1_000, currency: 'CNY', records: 2, sessions: 1 }, tools: foldTools([traceLine('read', false, 1)]), tasks: [], sessions: { sessions: 2, records: 5, tokens: 40_000, costMicros: 0 }, forecast: { updatedAt: NOW.toISOString(), currency: 'CNY', dailyRateMicros: 100, trend: 'flat', month: '2026-10', spentThisMonthMicros: 100, projectedMonthEndMajor: 1, budgetMajor: 20, daysUntilBudget: 30, budgetExhaustionDate: '2026-11-01' } })),
+    signals({ budget: { updatedAt: NOW.toISOString(), budgetTokens: 100_000, maxSessionTokens: 90_000, maxSessionRatio: 0.9, nextTurnEstTokens: 20_000, currency: 'CNY' }, spend: { monthMicros: 1_000, currency: 'CNY', records: 2, sessions: 1 }, tools: foldTools([traceLine('read', false, 1)]), tasks: [], sessions: { sessions: 2, records: 5, tokens: 40_000, costMicros: 0 }, forecast: { updatedAt: NOW.toISOString(), currency: 'CNY', dailyRateMicros: 100, trend: 'flat', month: '2026-10', spentThisMonthMicros: 100, projectedMonthEndMajor: 1, budgetMajor: 20, daysUntilBudget: 30, budgetExhaustionDate: '2026-11-01' } }),
   );
   assert.ok(seen.startsWith('今天第一件事：'), seen);
   assert.ok(seen.includes('依据：task-forge 0 个任务 · quota 预算 90% · tool-trace 1 次调用·错误率 0% · session-insights 2 会话/5 事件 · cost-ledger 2 条'), seen);
@@ -240,6 +240,7 @@ test('/today wires the four sources into one ranked answer', () => {
   writeFileSync(join(root, 'tool-trace-2026-10.jsonl'), JSON.stringify({ v: 1, sessionId: 's', at: NOW.toISOString(), tool: 'read', durationMs: 10, argChars: 1, resultChars: 2, isError: false }), 'utf8');
   writeFileSync(join(root, 'ledger-2026-10.jsonl'), JSON.stringify({ at: NOW.toISOString(), sessionId: 's', costMicros: 1_500_000, currency: 'CNY', modelId: 'deepseek-chat' }), 'utf8');
   writeFileSync(join(root, 'insights-2026-10.jsonl'), JSON.stringify({ v: 1, sessionId: 's', at: NOW.toISOString(), day: '2026-10-02', modelId: 'deepseek-chat', buckets: { uncachedInput: 2_000, output: 300, cacheRead: 0, cacheWrite: 0 } }), 'utf8');
+  writeFileSync(join(root, 'forecast.json'), JSON.stringify({ v: 1, updatedAt: NOW.toISOString(), currency: 'CNY', dailyRateMicros: 100, trend: 'flat', month: '2026-10', spentThisMonthMicros: 1_000, projectedMonthEndMajor: 2, budgetMajor: 20, daysUntilBudget: 30, budgetExhaustionDate: '2026-11-01' }), 'utf8');
   const commands: Cmd[] = [];
   const mount = (config: Record<string, unknown> = {}): void => {
     apply({ logger: () => ({ info() {}, warn() {}, debug() {} }), commands: { register: (definition: Cmd) => void commands.push(definition) } } as never, {
@@ -251,6 +252,7 @@ test('/today wires the four sources into one ranked answer', () => {
       taskForgeLedger: write('tasks.jsonl', JSON.stringify({ ts: NOW.toISOString(), task: '20261002-aaaa', event: 'acked', version: 1, status: 'relayed', title: '交接A', note: 'need-input · 缺口 2 条' })),
       toolTraceDir: root,
       sessionInsightsDir: root,
+      forecastPath: join(root, 'forecast.json'),
       todayWindowDays: 3,
       ...config,
     } as never);
@@ -275,6 +277,7 @@ test('/today wires the four sources into one ranked answer', () => {
     taskForgeLedger: join(root, 'nothing-ledger.jsonl'),
     toolTraceDir: join(root, 'nothing-trace'),
     sessionInsightsDir: join(root, 'nothing-insights'),
+    forecastPath: join(root, 'nothing-forecast.json'),
     todayWindowDays: 3,
   } as never);
   const blindText = quiet.find((command) => command.name === 'today')!.handler({}).text;
@@ -289,4 +292,37 @@ test('readSessions mirrors insights sidecars inside the window and tolerates jun
   const signal = readSessions(root, NOW, 3);
   assert.deepEqual(signal, { sessions: 2, records: 2, tokens: 5_000, costMicros: 4_000_000 });
   assert.equal(foldSessions([]).sessions, 0);
+});
+
+test('readForecast mirrors forecast.json; a burn-out within the week becomes an action', () => {
+  const root = tempDir();
+  assert.equal(readForecast(join(root, 'no.json')), null);
+  writeFileSync(join(root, 'forecast.json'), '{ broken', 'utf8');
+  assert.equal(readForecast(join(root, 'forecast.json')), null);
+  writeFileSync(
+    join(root, 'forecast.json'),
+    JSON.stringify({ v: 1, updatedAt: NOW.toISOString(), currency: 'CNY', dailyRateMicros: 3_000_000, trend: 'accelerating', month: '2026-10', spentThisMonthMicros: 60_000_000, projectedMonthEndMajor: 25, budgetMajor: 20, daysUntilBudget: 3, budgetExhaustionDate: '2026-10-05' }),
+    'utf8',
+  );
+  const signal = readForecast(join(root, 'forecast.json'));
+  assert.equal(signal!.daysUntilBudget, 3);
+  assert.equal(signal!.trend, 'accelerating');
+  // wrong envelope version is not a contract
+  writeFileSync(join(root, 'v2.json'), JSON.stringify({ v: 2, updatedAt: NOW.toISOString(), currency: 'CNY', dailyRateMicros: 1 }), 'utf8');
+  assert.equal(readForecast(join(root, 'v2.json')), null);
+
+  // the rule: burn-out within burnSoonDays outranks the generic spend line
+  const plan = prioritiseToday(signals({ forecast: signal! }));
+  const burn = plan.actions.find((action) => action.command === '/forecast' && action.do.includes('烧穿'));
+  assert.ok(burn, JSON.stringify(plan.actions));
+  assert.ok(burn!.do.includes('3 天后'), burn!.do);
+  assert.ok(burn!.do.includes('2026-10-05'), burn!.do);
+  assert.ok(burn!.why.includes('¥3.00'), burn!.why);
+
+  // far burn-out: no burn action, blind spot gone
+  const far = { ...signal!, daysUntilBudget: 30, budgetExhaustionDate: '2026-11-01' };
+  const farPlan = prioritiseToday(signals({ forecast: far }));
+  assert.ok(!farPlan.actions.some((action) => action.do.includes('烧穿')), JSON.stringify(farPlan.actions));
+  const blindText = renderToday(prioritiseToday(signals({ forecast: far })), signals({ forecast: far }));
+  assert.ok(!blindText.includes('spend-forecast 的 forecast.json'), blindText);
 });
