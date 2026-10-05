@@ -8,8 +8,8 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { foldTasks, foldTools, money, prioritiseToday, renderToday, TODAY_RULES, type TodaySignals } from '../src/hub/today.ts';
-import { readBudget, readSpend, readTasks, readTools } from '../src/hub/today-readers.ts';
+import { foldTasks, foldTools, foldSessions, money, prioritiseToday, renderToday, TODAY_RULES, type TodaySignals } from '../src/hub/today.ts';
+import { readBudget, readSessions, readSpend, readTasks, readTools } from '../src/hub/today-readers.ts';
 import { apply } from '../src/plugin.ts';
 
 const NOW = new Date('2026-10-02T12:00:00.000Z');
@@ -155,11 +155,11 @@ test('the render names its blind spots instead of implying full sight', () => {
     assert.ok(blind.includes(source), `missing source not named: ${source}`);
   }
   const seen = renderToday(
-    prioritiseToday(signals({ budget: { updatedAt: NOW.toISOString(), budgetTokens: 100_000, maxSessionTokens: 90_000, maxSessionRatio: 0.9, nextTurnEstTokens: 20_000, currency: 'CNY' }, spend: { monthMicros: 1_000, currency: 'CNY', records: 2, sessions: 1 }, tools: foldTools([traceLine('read', false, 1)]), tasks: [] })),
-    signals({ budget: { updatedAt: NOW.toISOString(), budgetTokens: 100_000, maxSessionTokens: 90_000, maxSessionRatio: 0.9, nextTurnEstTokens: 20_000, currency: 'CNY' }, spend: { monthMicros: 1_000, currency: 'CNY', records: 2, sessions: 1 }, tools: foldTools([traceLine('read', false, 1)]), tasks: [] }),
+    prioritiseToday(signals({ budget: { updatedAt: NOW.toISOString(), budgetTokens: 100_000, maxSessionTokens: 90_000, maxSessionRatio: 0.9, nextTurnEstTokens: 20_000, currency: 'CNY' }, spend: { monthMicros: 1_000, currency: 'CNY', records: 2, sessions: 1 }, tools: foldTools([traceLine('read', false, 1)]), tasks: [], sessions: { sessions: 2, records: 5, tokens: 40_000, costMicros: 0 } })),
+    signals({ budget: { updatedAt: NOW.toISOString(), budgetTokens: 100_000, maxSessionTokens: 90_000, maxSessionRatio: 0.9, nextTurnEstTokens: 20_000, currency: 'CNY' }, spend: { monthMicros: 1_000, currency: 'CNY', records: 2, sessions: 1 }, tools: foldTools([traceLine('read', false, 1)]), tasks: [], sessions: { sessions: 2, records: 5, tokens: 40_000, costMicros: 0 } }),
   );
   assert.ok(seen.startsWith('今天第一件事：'), seen);
-  assert.ok(seen.includes('依据：task-forge 0 个任务 · quota 预算 90% · tool-trace 1 次调用·错误率 0% · cost-ledger 2 条'), seen);
+  assert.ok(seen.includes('依据：task-forge 0 个任务 · quota 预算 90% · tool-trace 1 次调用·错误率 0% · session-insights 2 会话/5 事件 · cost-ledger 2 条'), seen);
   assert.ok(!seen.includes('看不到的部分'), seen);
   assert.ok(seen.includes('   └ 最热的会话 90k/100k tok，下步还要 ~20k'), seen);
   assert.ok(!seen.includes('  1. '), 'the headline action is not repeated as row 1');
@@ -239,6 +239,7 @@ test('/today wires the four sources into one ranked answer', () => {
   };
   writeFileSync(join(root, 'tool-trace-2026-10.jsonl'), JSON.stringify({ v: 1, sessionId: 's', at: NOW.toISOString(), tool: 'read', durationMs: 10, argChars: 1, resultChars: 2, isError: false }), 'utf8');
   writeFileSync(join(root, 'ledger-2026-10.jsonl'), JSON.stringify({ at: NOW.toISOString(), sessionId: 's', costMicros: 1_500_000, currency: 'CNY', modelId: 'deepseek-chat' }), 'utf8');
+  writeFileSync(join(root, 'insights-2026-10.jsonl'), JSON.stringify({ v: 1, sessionId: 's', at: NOW.toISOString(), day: '2026-10-02', modelId: 'deepseek-chat', buckets: { uncachedInput: 2_000, output: 300, cacheRead: 0, cacheWrite: 0 } }), 'utf8');
   const commands: Cmd[] = [];
   const mount = (config: Record<string, unknown> = {}): void => {
     apply({ logger: () => ({ info() {}, warn() {}, debug() {} }), commands: { register: (definition: Cmd) => void commands.push(definition) } } as never, {
@@ -249,6 +250,7 @@ test('/today wires the four sources into one ranked answer', () => {
       costLedgerDir: root,
       taskForgeLedger: write('tasks.jsonl', JSON.stringify({ ts: NOW.toISOString(), task: '20261002-aaaa', event: 'acked', version: 1, status: 'relayed', title: '交接A', note: 'need-input · 缺口 2 条' })),
       toolTraceDir: root,
+      sessionInsightsDir: root,
       todayWindowDays: 3,
       ...config,
     } as never);
@@ -261,7 +263,7 @@ test('/today wires the four sources into one ranked answer', () => {
   // 92k used + 30k predicted over a 100k budget: the money is the first thing
   assert.ok(text.includes('今天第一件事：这一步会把单会话预算烧穿'), text);
   assert.ok(text.includes('回答 20261002-aaaa 的 2 条缺口'), text);
-  assert.ok(!text.includes('看不到的部分'), 'all four sources resolved here');
+  assert.ok(!text.includes('看不到的部分'), 'all five sources resolved here');
 
   // an empty day with nothing installed still answers, and says what it could not see
   const quiet: Cmd[] = [];
@@ -272,9 +274,19 @@ test('/today wires the four sources into one ranked answer', () => {
     costLedgerDir: join(root, 'nothing-dir'),
     taskForgeLedger: join(root, 'nothing-ledger.jsonl'),
     toolTraceDir: join(root, 'nothing-trace'),
+    sessionInsightsDir: join(root, 'nothing-insights'),
     todayWindowDays: 3,
   } as never);
   const blindText = quiet.find((command) => command.name === 'today')!.handler({}).text;
   assert.ok(blindText.includes('没有阻塞'), blindText);
   assert.ok(blindText.includes('quota 的 summary.json'), blindText);
+});
+
+test('readSessions mirrors insights sidecars inside the window and tolerates junk', () => {
+  const root = tempDir();
+  assert.equal(readSessions(join(root, 'no-insights'), NOW, 3), null);
+  writeFileSync(join(root, 'insights-2026-10.jsonl'), ['junk', '{ broken', JSON.stringify({ v: 1, sessionId: 'a', at: NOW.toISOString(), day: '2026-10-02', modelId: 'm', buckets: { uncachedInput: 1_000, output: 200 } }), JSON.stringify({ v: 1, sessionId: 'b', at: NOW.toISOString(), day: '2026-10-02', modelId: 'm', buckets: { uncachedInput: 3_000, output: 800 }, costMicros: 4_000_000 }), JSON.stringify({ v: 1, sessionId: 'c', at: '2026-08-01T00:00:00.000Z', day: '2026-08-01', modelId: 'm', buckets: { uncachedInput: 99_000, output: 99_000 } })].join('\n'), 'utf8');
+  const signal = readSessions(root, NOW, 3);
+  assert.deepEqual(signal, { sessions: 2, records: 2, tokens: 5_000, costMicros: 4_000_000 });
+  assert.equal(foldSessions([]).sessions, 0);
 });

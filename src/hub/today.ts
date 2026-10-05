@@ -52,12 +52,26 @@ export interface ToolSignal {
   hot: Array<{ tool: string; rate: number }>;
 }
 
+/** Cross-session volume from session-insights' monthly sidecars — context for
+ * "how much ran at all", not a blocker on its own. */
+export interface SessionsSignal {
+  /** distinct sessions inside the window */
+  sessions: number;
+  /** usage events folded inside the window */
+  records: number;
+  /** uncached input + output, the same "used" figure the gauges show */
+  tokens: number;
+  costMicros: number;
+}
+
 export interface TodaySignals {
   now: Date;
   budget: BudgetSignal | null;
   spend: SpendSignal | null;
   tasks: TaskSignal[];
   tools: ToolSignal | null;
+  /** optional so older signal snapshots stay valid; null/absent = blind spot */
+  sessions?: SessionsSignal | null;
 }
 
 export interface TodayAction {
@@ -170,6 +184,25 @@ export function foldTools(records: Array<{ at: string; tool: string; isError?: b
   return { calls, errors, errorRate: calls ? errors / calls : 0, streaks, hot };
 }
 
+/** Fold session-insights records (v1 sidecar rows) into window volume. */
+export function foldSessions(records: Array<{ sessionId?: unknown; buckets?: Record<string, unknown>; costMicros?: unknown }>): SessionsSignal {
+  const sessions = new Set<string>();
+  let recordsSeen = 0;
+  let tokens = 0;
+  let costMicros = 0;
+  for (const record of records) {
+    if (typeof record?.sessionId !== 'string' || !record.sessionId) continue;
+    sessions.add(record.sessionId);
+    recordsSeen += 1;
+    const buckets = record.buckets ?? {};
+    const uncached = typeof buckets.uncachedInput === 'number' && Number.isFinite(buckets.uncachedInput) ? buckets.uncachedInput : 0;
+    const output = typeof buckets.output === 'number' && Number.isFinite(buckets.output) ? buckets.output : 0;
+    tokens += uncached + output;
+    if (typeof record.costMicros === 'number' && Number.isFinite(record.costMicros)) costMicros += record.costMicros;
+  }
+  return { sessions: sessions.size, records: recordsSeen, tokens, costMicros };
+}
+
 /** The rule table itself: first match wins as the headline, the rest are actions. */
 export function prioritiseToday(signals: TodaySignals): TodayPlan {
   const rules = TODAY_RULES;
@@ -179,6 +212,7 @@ export function prioritiseToday(signals: TodaySignals): TodayPlan {
   if (!signals.budget) blind.push('quota 的 summary.json（预算与下步预估）');
   if (!signals.spend) blind.push('cost-ledger 台账（本月花费）');
   if (!signals.tools) blind.push('tool-trace 追踪（工具面健康）');
+  if (!signals.sessions) blind.push('session-insights 侧车（跨会话统计）');
   // an empty task ledger is a fact, not a blind spot — the 依据 line says 0 个任务
 
   if (signals.tools?.streaks.length) {
@@ -269,7 +303,8 @@ export function renderToday(plan: TodayPlan, signals: TodaySignals): string {
   });
   const seen = signals.budget ? `预算 ${signals.budget.maxSessionRatio === null ? '未设' : `${Math.round(signals.budget.maxSessionRatio * 100)}%`}` : '预算未知';
   const toolText = signals.tools ? `${signals.tools.calls} 次调用·错误率 ${Math.round(signals.tools.errorRate * 100)}%` : '工具面未知';
-  lines.push(`\n依据：task-forge ${signals.tasks.length} 个任务 · quota ${seen} · tool-trace ${toolText}${signals.spend ? ` · cost-ledger ${signals.spend.records} 条` : ''}`);
+  const sessionsText = signals.sessions ? ` · session-insights ${signals.sessions.sessions} 会话/${signals.sessions.records} 事件` : '';
+  lines.push(`\n依据：task-forge ${signals.tasks.length} 个任务 · quota ${seen} · tool-trace ${toolText}${sessionsText}${signals.spend ? ` · cost-ledger ${signals.spend.records} 条` : ''}`);
   if (plan.blind.length) lines.push(`看不到的部分：${plan.blind.join('、')}——没装或还没写出数据，规则表据现有信号给结论。`);
   return lines.join('\n');
 }

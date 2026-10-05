@@ -26,7 +26,7 @@ import {
 } from './hub/pointers.ts';
 import { planMigration, renderPlan, type QuotaState } from './hub/migrate.ts';
 import { prioritiseToday, renderToday, type TodaySignals } from './hub/today.ts';
-import { readBudget, readSpend, readTasks, readTools } from './hub/today-readers.ts';
+import { readBudget, readSessions, readSpend, readTasks, readTools } from './hub/today-readers.ts';
 import { discoverRules, renderInventoryNote, renderMigrationNote, renderRulesNotes, writeNotes, type RuleFileInfo } from './hub/obsidian.ts';
 import { scanClaudeCode, scanCodex, aggregate, renderUsage, recentSessions, type UsageRecord } from './hub/usage.ts';
 import { readZcodeUsage, readZcodeSessions, readZcodeModels, zcodeStats, type ZcodeUsageRecord } from './hub/zcode-db.ts';
@@ -48,6 +48,7 @@ export const TODAY_DEFAULTS = {
   costLedgerDir: '~/.dsh/cost-ledger',
   taskForgeLedger: '~/.dsh/task-forge/ledger.jsonl',
   toolTraceDir: '~/.dsh/tool-trace',
+  sessionInsightsDir: '~/.dsh/session-insights',
   todayWindowDays: 3,
 } as const;
 
@@ -59,6 +60,7 @@ export interface Config {
   costLedgerDir?: string;
   taskForgeLedger?: string;
   toolTraceDir?: string;
+  sessionInsightsDir?: string;
   todayWindowDays?: number;
 }
 
@@ -77,6 +79,7 @@ export const Config = Schema.object({
   costLedgerDir: Schema.string().default(TODAY_DEFAULTS.costLedgerDir),
   taskForgeLedger: Schema.string().default(TODAY_DEFAULTS.taskForgeLedger),
   toolTraceDir: Schema.string().default(TODAY_DEFAULTS.toolTraceDir),
+  sessionInsightsDir: Schema.string().default(TODAY_DEFAULTS.sessionInsightsDir),
   todayWindowDays: Schema.natural().default(TODAY_DEFAULTS.todayWindowDays),
 });
 
@@ -330,6 +333,7 @@ export function apply(ctx: Context, config: Config): void {
     ledger: config.costLedgerDir || TODAY_DEFAULTS.costLedgerDir,
     tasks: config.taskForgeLedger || TODAY_DEFAULTS.taskForgeLedger,
     trace: config.toolTraceDir || TODAY_DEFAULTS.toolTraceDir,
+    insights: config.sessionInsightsDir || TODAY_DEFAULTS.sessionInsightsDir,
   };
 
   ctx.commands.register({
@@ -453,6 +457,7 @@ export function apply(ctx: Context, config: Config): void {
         spend: readSpend(expandPath(paths.ledger), now),
         tasks: readTasks(expandPath(paths.tasks)),
         tools: readTools(expandPath(paths.trace), now, windowDays),
+        sessions: readSessions(expandPath(paths.insights), now, windowDays),
       };
       return { kind: 'success', text: renderToday(prioritiseToday(signals), signals) };
     },

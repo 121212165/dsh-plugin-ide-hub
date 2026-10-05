@@ -7,7 +7,7 @@
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { foldTasks, foldTools, type BudgetSignal, type SpendSignal, type TaskSignal, type ToolSignal } from './today.ts';
+import { foldTasks, foldTools, foldSessions, type BudgetSignal, type SessionsSignal, type SpendSignal, type TaskSignal, type ToolSignal } from './today.ts';
 
 function whole(value: unknown): number | null {
   return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : null;
@@ -130,4 +130,13 @@ export function readTools(dir: string, now: Date, days: number): ToolSignal | nu
   const fresh = rows.filter((row) => typeof row.at === 'string' && Number.isFinite(Date.parse(row.at)) && Date.parse(row.at as string) >= since);
   if (!fresh.length) return null;
   return foldTools(fresh as unknown as Array<{ at: string; tool: string; isError?: boolean }>);
+}
+
+/** session-insights' monthly sidecars within the window, folded into volume. */
+export function readSessions(dir: string, now: Date, days: number): SessionsSignal | null {
+  const since = now.getTime() - days * 86_400_000;
+  const { rows } = jsonl(dir, /^insights-\d{4}-(0[1-9]|1[0-2])\.jsonl$/);
+  const fresh = rows.filter((row) => typeof row.at === 'string' && Number.isFinite(Date.parse(row.at)) && Date.parse(row.at as string) >= since);
+  if (!fresh.length) return null;
+  return foldSessions(fresh);
 }
