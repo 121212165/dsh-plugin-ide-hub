@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { claudeRecord, codexRecord, resumeCommand } from '../src/hub/usage-reader.ts';
-import { aggregate, recentSessions, renderUsage } from '../src/hub/usage.ts';
+import { aggregate, recentSessions, renderUsage, weekActivity, renderWeek } from '../src/hub/usage.ts';
 import type { UsageRecord } from '../src/hub/usage-reader.ts';
 
 test('claude assistant line with usage parses into a record', () => {
@@ -69,4 +69,40 @@ test('recentSessions dedupes per session and maps resume commands', () => {
 
 test('rendering is stable without data', () => {
   assert.ok(renderUsage([]).includes('没有读到'));
+});
+
+test('weekActivity groups per tool inside the window; renderWeek prints one row each', () => {
+  const now = new Date('2026-10-05T12:00:00.000Z');
+  const source = (tool: string, sessionId: string, at: string, totalTokens?: number) => ({
+    tool,
+    sessionId,
+    at,
+    day: at.slice(0, 10),
+    totalTokens,
+  });
+  const records = [
+    source('claude-code', 's1', '2026-10-05T08:00:00.000Z', 1_200),
+    source('claude-code', 's1', '2026-10-04T08:00:00.000Z', 800), // same session, two turns
+    source('claude-code', 's2', '2026-09-01T08:00:00.000Z', 999_999), // outside the window
+    source('codex', 's3', '2026-10-03T08:00:00.000Z', 2_000),
+    source('trae', 's4', '2026-10-05T09:00:00.000Z'), // session-only source: no tokens
+    { tool: 'codex', sessionId: 's5', at: 'not-a-date', day: 'x', totalTokens: 5 }, // unusable stamp
+  ];
+
+  const rows = weekActivity(records, now);
+  assert.deepEqual(rows.map((row) => row.tool), ['claude-code', 'codex', 'trae']); // tokens desc, trae last
+  const claude = rows[0]!;
+  assert.equal(claude.sessions, 1, 's2 is outside the window; only s1 counts');
+  assert.equal(claude.events, 2, 'the out-of-window event is not counted');
+  assert.equal(claude.totalTokens, 2_000);
+  assert.equal(claude.activeDays, 2);
+  assert.equal(claude.firstDay, '2026-10-04');
+  assert.equal(rows[2]!.totalTokens, 0, 'trae has no token data and that is fine');
+
+  const text = renderWeek(rows);
+  assert.ok(text.includes('近 7 天'), text);
+  assert.ok(text.includes('claude-code'), text);
+  assert.ok(text.includes('1 会话 · 2 轮 · 2,000 tok'), text);
+  assert.ok(text.includes('2026-09-29 → ') === false, 'span only covers in-window days');
+  assert.match(renderWeek([]), /没有任何 IDE 活动记录/);
 });

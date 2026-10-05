@@ -28,7 +28,7 @@ import { planMigration, renderPlan, type QuotaState } from './hub/migrate.ts';
 import { prioritiseToday, renderToday, type TodaySignals } from './hub/today.ts';
 import { readBudget, readForecast, readSessions, readSpend, readTasks, readTools } from './hub/today-readers.ts';
 import { discoverRules, renderInventoryNote, renderMigrationNote, renderRulesNotes, writeNotes, type RuleFileInfo } from './hub/obsidian.ts';
-import { scanClaudeCode, scanCodex, aggregate, renderUsage, recentSessions, type UsageRecord } from './hub/usage.ts';
+import { scanClaudeCode, scanCodex, aggregate, renderUsage, recentSessions, weekActivity, renderWeek, type UsageRecord } from './hub/usage.ts';
 import { readZcodeUsage, readZcodeSessions, readZcodeModels, zcodeStats, type ZcodeUsageRecord } from './hub/zcode-db.ts';
 import { scanTrae, traeChatSessions } from './hub/trae-db.ts';
 
@@ -447,6 +447,34 @@ export function apply(ctx: Context, config: Config): void {
         return `  [${session.tool}] ${session.at.slice(0, 16).replace('T', ' ')}${cwd}\n    ↳ ${resume}`;
       });
       return { kind: 'success', text: `最近 ${sessions.length} 个会话:\n${lines.join('\n')}` };
+    },
+  });
+
+  ctx.commands.register({
+    name: 'hub-week',
+    description: '各 IDE 近 7 天活跃：会话数/轮次/token/活跃日（复用 /hub-sessions 同源读取器）',
+    handler: () => {
+      const now = new Date();
+      const weekToken = (record: { tool: string; sessionId: string; at: string; day: string; inputTokens: number; outputTokens: number; cacheReadTokens: number; cacheWriteTokens: number }) => ({
+        tool: record.tool,
+        sessionId: record.sessionId,
+        at: record.at,
+        day: record.day,
+        totalTokens: record.inputTokens + record.outputTokens + record.cacheReadTokens + record.cacheWriteTokens,
+      });
+      const sources = [
+        ...scanClaudeCode().map(weekToken),
+        ...scanCodex().map(weekToken),
+        ...readZcodeUsage().map(weekToken),
+        ...traeChatSessions(scanTrae(), 100).map((session) => ({
+          tool: 'trae',
+          sessionId: session.sessionId,
+          at: session.updatedAt ?? '',
+          day: (session.updatedAt ?? '').slice(0, 10),
+          totalTokens: undefined as number | undefined,
+        })),
+      ];
+      return { kind: 'success', text: renderWeek(weekActivity(sources, now)) };
     },
   });
 

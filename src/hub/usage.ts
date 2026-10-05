@@ -182,3 +182,63 @@ export function recentSessions(records: UsageRecord[], limit = 10): SessionRef[]
       resumeCommand: resumeCommand(record.tool, record.sessionId),
     }));
 }
+
+/** Minimal week-activity source: everything /hub-week counts. UsageRecord fits
+ * as-is; session-only sources (trae) fill in what they have and leave tokens off. */
+export interface WeekSource {
+  tool: string;
+  sessionId: string;
+  at: string;
+  day: string;
+  totalTokens?: number;
+}
+
+export interface WeekRow {
+  tool: string;
+  /** distinct sessions inside the window */
+  sessions: number;
+  /** usage events (≈轮次) inside the window */
+  events: number;
+  activeDays: number;
+  totalTokens: number;
+  firstDay: string;
+  lastDay: string;
+}
+
+/** Per-tool activity inside the trailing window, biggest spender first. Pure. */
+export function weekActivity(records: WeekSource[], now: Date, days = 7): WeekRow[] {
+  const cutoff = now.getTime() - days * 86_400_000;
+  const byTool = new Map<string, WeekSource[]>();
+  for (const record of records) {
+    const at = Date.parse(record.at);
+    if (!Number.isFinite(at) || at < cutoff) continue;
+    const group = byTool.get(record.tool) ?? [];
+    group.push(record);
+    byTool.set(record.tool, group);
+  }
+  return [...byTool.entries()]
+    .map(([tool, group]) => {
+      const sessions = new Set(group.map((record) => record.sessionId));
+      const activeDays = new Set(group.map((record) => record.day));
+      let totalTokens = 0;
+      let firstDay = '';
+      let lastDay = '';
+      for (const record of group) {
+        totalTokens += record.totalTokens ?? 0;
+        if (!firstDay || record.day < firstDay) firstDay = record.day;
+        if (!lastDay || record.day > lastDay) lastDay = record.day;
+      }
+      return { tool, sessions: sessions.size, events: group.length, activeDays: activeDays.size, totalTokens, firstDay, lastDay };
+    })
+    .sort((a, b) => b.totalTokens - a.totalTokens || b.events - a.events || (a.tool < b.tool ? -1 : 1));
+}
+
+export function renderWeek(rows: WeekRow[], days = 7): string {
+  if (!rows.length) return `近 ${days} 天没有任何 IDE 活动记录。`;
+  const lines = [`各 IDE 近 ${days} 天活跃（按 token 排序）:`];
+  for (const row of rows) {
+    const tokens = row.totalTokens > 0 ? `${row.totalTokens.toLocaleString()} tok · ` : '';
+    lines.push(`  ${row.tool.padEnd(12)} ${row.sessions} 会话 · ${row.events} 轮 · ${tokens}${row.activeDays} 活跃日（${row.firstDay} → ${row.lastDay}）`);
+  }
+  return lines.join('\n');
+}
