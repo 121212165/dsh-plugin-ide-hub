@@ -232,14 +232,18 @@ test('the readers mirror the other plugins files, and tolerate junk', () => {
 
 test('/today wires the four sources into one ranked answer', () => {
   const root = tempDir();
+  // the window-filtered readers (tool-trace / cost-ledger / session-insights) must see fresh
+  // rows: pinning them to NOW makes this test a time bomb the moment the clock outruns the window
+  const freshNow = new Date();
+  const freshMonth = `${freshNow.getUTCFullYear()}-${String(freshNow.getUTCMonth() + 1).padStart(2, '0')}`;
   const write = (name: string, body: string): string => {
     const file = join(root, name);
     writeFileSync(file, body, 'utf8');
     return file;
   };
-  writeFileSync(join(root, 'tool-trace-2026-10.jsonl'), JSON.stringify({ v: 1, sessionId: 's', at: NOW.toISOString(), tool: 'read', durationMs: 10, argChars: 1, resultChars: 2, isError: false }), 'utf8');
-  writeFileSync(join(root, 'ledger-2026-10.jsonl'), JSON.stringify({ at: NOW.toISOString(), sessionId: 's', costMicros: 1_500_000, currency: 'CNY', modelId: 'deepseek-chat' }), 'utf8');
-  writeFileSync(join(root, 'insights-2026-10.jsonl'), JSON.stringify({ v: 1, sessionId: 's', at: NOW.toISOString(), day: '2026-10-02', modelId: 'deepseek-chat', buckets: { uncachedInput: 2_000, output: 300, cacheRead: 0, cacheWrite: 0 } }), 'utf8');
+  writeFileSync(join(root, `tool-trace-${freshMonth}.jsonl`), JSON.stringify({ v: 1, sessionId: 's', at: freshNow.toISOString(), tool: 'read', durationMs: 10, argChars: 1, resultChars: 2, isError: false }), 'utf8');
+  writeFileSync(join(root, `ledger-${freshMonth}.jsonl`), JSON.stringify({ at: freshNow.toISOString(), sessionId: 's', costMicros: 1_500_000, currency: 'CNY', modelId: 'deepseek-chat' }), 'utf8');
+  writeFileSync(join(root, `insights-${freshMonth}.jsonl`), JSON.stringify({ v: 1, sessionId: 's', at: freshNow.toISOString(), day: '2026-10-02', modelId: 'deepseek-chat', buckets: { uncachedInput: 2_000, output: 300, cacheRead: 0, cacheWrite: 0 } }), 'utf8');
   writeFileSync(join(root, 'forecast.json'), JSON.stringify({ v: 1, updatedAt: NOW.toISOString(), currency: 'CNY', dailyRateMicros: 100, trend: 'flat', month: '2026-10', spentThisMonthMicros: 1_000, projectedMonthEndMajor: 2, budgetMajor: 20, daysUntilBudget: 30, budgetExhaustionDate: '2026-11-01' }), 'utf8');
   const commands: Cmd[] = [];
   const mount = (config: Record<string, unknown> = {}): void => {
