@@ -1,5 +1,19 @@
 # dsh-plugin-ide-hub
 
+<div align="center">
+
+**一个入口管住所有编码 IDE：会话、用量、规则文件** —— 8 个 IDE 零 API 盘点（含 Trae / Qoder / CatPaw 国产适配）· 用量与缓存命中率 · 会话一键恢复 · 规则一份本体多 IDE 下发
+
+[![GitHub stars](https://img.shields.io/github/stars/121212165/dsh-plugin-ide-hub?style=social)](https://github.com/121212165/dsh-plugin-ide-hub/stargazers) [![license](https://img.shields.io/badge/license-MIT-green)](LICENSE) [![tests](https://img.shields.io/badge/tests-node%20--test%20passing-brightgreen)]()
+
+**60 秒上手**：`dsh plugin --profile web add github:121212165/dsh-plugin-ide-hub` → 重启 dsh → 对话里输入 `/ide-hub`（详细安装与排坑见下文）
+
+<!-- 截图版位：web UI 实拍截图 / GIF（待补） -->
+
+</div>
+
+> 🧩 **dsh 插件家族**（22 件）：总目录 **[dsh-plugin-family](https://github.com/121212165/dsh-plugin-family)** ｜ 兄弟插件：**[task-forge](https://github.com/121212165/dsh-plugin-task-forge)** 跨窗口无损交接 · **[quota](https://github.com/121212165/dsh-plugin-quota)** 实时用量仪表
+
 **EN** · One hub over the coding IDEs you actually run — dsh, Claude Code, Codex, ZCode, Qoder, CatPaw, Trae, OpenCode. It reads each tool's own on-disk state (sessions, usage, prompt-rule files) instead of calling any API, then gives you an inventory (`/ide-hub`), a quota-runway migration plan (`/hub-migrate`), usage breakdowns (`/hub-usage`), resumable sessions (`/hub-sessions`), a ranked "what should I do first" over the sibling plugins (`/today`) and an Obsidian export (`/hub-export`) — and, since `/hub-init`, writes back exactly one thing: a `.hub/` rule body plus a marker-delimited pointer in each tool's project rule file. · 45 `node --test` green · reads real local data on this machine · v0.4's Trae chat reader is **not yet wired into `/hub-sessions`** — see 已知边界.
 
 DeepSeek Harness (dsh) 插件：跨 IDE 统一管理器。各家编码 IDE 都把会话、用量、提示词规则写在自己的磁盘目录里，本插件直接读这些文件（不调任何厂商 API），在 dsh 里出六个命令。读之外只有一处写：`/hub-init` 往**你自己指定的项目目录**里装 `.hub/` 规则本体与各 IDE 的指针段。
