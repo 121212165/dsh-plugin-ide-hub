@@ -11,14 +11,6 @@
       "types": "./lib/types/index.d.ts",
       "default": "./lib/index.js"
     },
-    "./pricing": {
-      "types": "./lib/types/pricing/index.d.ts",
-      "default": "./lib/pricing/index.js"
-    },
-    "./ledger": {
-      "types": "./lib/types/ledger/index.d.ts",
-      "default": "./lib/ledger/index.js"
-    },
     "./package.json": "./package.json",
     "./locale/*": "./locale/*",
     "./icon.svg": "./icon.svg"
@@ -68,7 +60,8 @@
     "@deepseek-ai/schemastery": "3.18.2",
     "@deepseek-ai/dsh-tools": "^0.1.2-alpha.4",
     "@types/node": "26.6.2",
-    "typescript": "7.0.2"
+    "typescript": "7.0.2",
+    "@dsh-family/kit": "workspace:*"
   },
   "peerDependencies": {
     "@deepseek-ai/cordis": ">=4.0.0"
