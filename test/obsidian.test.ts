@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { mkdtempSync, readFileSync, rmSync, existsSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, rmSync, existsSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { discoverRules, renderRulesNotes, renderMigrationNote, writeNotes } from '../src/hub/obsidian.ts';
@@ -36,4 +36,16 @@ test('migration note carries the plan lines', () => {
   assert.ok(note.path === 'IDE-Hub/额度迁移计划.md');
   assert.ok(note.content.includes('# 额度迁移计划'));
   assert.ok(note.content.includes('trae ❌ 耗尽'));
+});
+
+test('writeNotes creates the nested directories a deep note path needs', () => {
+  const vault = mkdtempSync(join(tmpdir(), 'ide-hub-deep-'));
+  const note = { path: 'IDE-Hub/notes/2026/十月/复盘.md', content: 'deep note\n' };
+  const result = writeNotes(vault, [note]);
+  assert.equal(result.written.length, 1);
+  assert.ok(existsSync(join(vault, 'IDE-Hub', 'notes', '2026', '十月', '复盘.md')), 'every "/" level of the note path becomes a directory');
+  const again = writeNotes(vault, [note]);
+  assert.equal(again.written.length, 0);
+  assert.equal(again.skipped, 1, 'the deep note is idempotent too');
+  rmSync(vault, { recursive: true, force: true });
 });

@@ -5,10 +5,10 @@
 export interface UsageRecord {
   tool: string;
   sessionId: string;
-  cwd?: string;
+  cwd?: string | undefined;
   at: string; // ISO
   day: string; // YYYY-MM-DD
-  model?: string;
+  model?: string | undefined;
   inputTokens: number;
   outputTokens: number;
   cacheReadTokens: number;
@@ -18,7 +18,7 @@ export interface UsageRecord {
 export interface SessionRef {
   tool: string;
   sessionId: string;
-  cwd?: string;
+  cwd?: string | undefined;
   at: string;
   /** shell command that resumes this session in the original tool */
   resumeCommand: string | null;

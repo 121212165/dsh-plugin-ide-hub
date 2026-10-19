@@ -17,7 +17,7 @@ export interface ZcodeUsageRecord extends UsageRecord {
 }
 
 export interface ZcodeSessionRef extends SessionRef {
-  title?: string;
+  title?: string | undefined;
   turns: number;
   lastActive: string;
 }

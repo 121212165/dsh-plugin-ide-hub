@@ -34,7 +34,7 @@ interface CapturedCommand {
   name: string;
   description: string;
   input?: { hint?: string };
-  handler: (args: { rawInput?: string }) => { kind: string; text: string };
+  handler: (args: { rawInput?: string | undefined }) => { kind: string; text: string };
 }
 
 function mount(): (name: string, rawInput?: string) => { kind: string; text: string } {

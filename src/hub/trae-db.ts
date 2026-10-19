@@ -13,9 +13,9 @@ import { join } from 'node:path';
 export interface TraeChatSession {
   sessionId: string;
   title: string;
-  workspaceFolder?: string;
-  createdAt?: string;
-  updatedAt?: string;
+  workspaceFolder?: string | undefined;
+  createdAt?: string | undefined;
+  updatedAt?: string | undefined;
   localMessages: number;
   hasMore: boolean;
   models: string[]; // per-message display model names, in order
@@ -29,7 +29,7 @@ export interface TraeInventory {
 
 export interface TraeWorkspace {
   storageId: string;
-  folder?: string;
+  folder?: string | undefined;
   sessions: number;
   localMessages: number;
   lastActive: string | null;

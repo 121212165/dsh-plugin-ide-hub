@@ -6,9 +6,10 @@
 import type { Context } from '@deepseek-ai/cordis';
 import Schema from '@deepseek-ai/schemastery';
 import type {} from '@deepseek-ai/dsh-commands';
-import { existsSync, mkdirSync, readFileSync, readdirSync, rmdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
-import { homedir } from 'node:os';
+import { existsSync, readFileSync, readdirSync, rmdirSync, rmSync, statSync } from 'node:fs';
 import { basename, dirname, join, relative, resolve } from 'node:path';
+
+import { writeFileAtomic } from '@dsh-family/kit';
 
 import { defaultRegistry, type IdeSpec } from './hub/registry.ts';
 import { inventory, expandPath, type IdeInventory } from './hub/inventory.ts';
@@ -156,8 +157,17 @@ function readIf(file: string): string | null {
 
 export type FileOutcome = 'created' | 'updated' | 'unchanged' | 'removed' | 'kept';
 
-function mkdirOf(file: string): void {
-  mkdirSync(file.replace(/[^\\/]*$/, ''), { recursive: true });
+/** Content-compare write: a rerun that changes nothing must not touch the file,
+ * and every real write is crank-safe (temp + rename inside the target dir). */
+function writeIfChanged(file: string, content: string): FileOutcome {
+  const existing = readIf(file);
+  if (existing === null) {
+    writeFileAtomic(file, content);
+    return 'created';
+  }
+  if (existing === content) return 'unchanged';
+  writeFileAtomic(file, content);
+  return 'updated';
 }
 
 /** Uninstall must not leave a skeleton: an empty directory on the way to a pointer
@@ -182,24 +192,11 @@ function pruneEmptyDirs(file: string, stopAt: string): void {
   }
 }
 
-/** Content-compare write: a rerun that changes nothing must not touch the file. */
-function writeIfChanged(file: string, content: string): FileOutcome {
-  const existing = readIf(file);
-  if (existing === null) {
-    mkdirOf(file);
-    writeFileSync(file, content, 'utf8');
-    return 'created';
-  }
-  if (existing === content) return 'unchanged';
-  writeFileSync(file, content, 'utf8');
-  return 'updated';
-}
-
 export interface HubInitOptions {
   remove?: boolean;
   dryRun?: boolean;
   /** restrict to a subset of the adapter table */
-  only?: string[];
+  only?: string[] | undefined;
   now?: Date;
 }
 
@@ -250,7 +247,7 @@ export function runHubInit(root: string, options: HubInitOptions = {}): HubInitR
         pruneEmptyDirs(file, root);
         changes.push({ file: target.path, outcome: 'removed', detail: '除指针段外没有内容，已删除' });
       } else {
-        writeFileSync(file, content, 'utf8');
+        writeFileAtomic(file, content);
         changes.push({ file: target.path, outcome: 'updated', detail: '已摘掉指针段，其余内容原样保留' });
       }
     }
@@ -440,13 +437,17 @@ export function apply(ctx: Context, config: Config): void {
       const sessions = [...recentSessions(records, 10), ...readZcodeSessions(undefined, 5)];
       const trae = traeChatSessions(scanTrae(), 5);
       const traeLines = trae.map((session) => `  [trae] ${(session.updatedAt || '').slice(0, 16).replace('T', ' ')} · ${session.title.slice(0, 30)}（${session.localMessages} 条本地消息${session.hasMore ? '，云上有更多' : ''}）— 无 CLI 恢复命令，需在 Trae 内打开项目 ${session.workspaceFolder ?? ''}`);
-      if (!sessions.length) return { kind: 'error', text: '没有找到可恢复的会话。' };
       const lines = sessions.map((session) => {
         const cwd = session.cwd ? ` · ${session.cwd}` : '';
         const resume = session.resumeCommand ?? '（该工具无私有恢复命令）';
         return `  [${session.tool}] ${session.at.slice(0, 16).replace('T', ' ')}${cwd}\n    ↳ ${resume}`;
       });
-      return { kind: 'success', text: `最近 ${sessions.length} 个会话:\n${lines.join('\n')}` };
+      if (!sessions.length && !traeLines.length) return { kind: 'error', text: '没有找到可恢复的会话。' };
+      const sections = [
+        ...(sessions.length ? [`最近 ${sessions.length} 个会话:`, ...lines] : []),
+        ...(traeLines.length ? [`trae 最近 ${traeLines.length} 个会话（本地转录，需在 Trae 内恢复）:`, ...traeLines] : []),
+      ];
+      return { kind: 'success', text: sections.join('\n') };
     },
   });
 

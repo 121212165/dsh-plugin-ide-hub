@@ -1,5 +1,6 @@
-import { existsSync, readFileSync, writeFileSync, mkdirSync, statSync } from 'node:fs';
+import { existsSync, readFileSync, statSync } from 'node:fs';
 import { join, basename } from 'node:path';
+import { writeFileAtomic } from '@dsh-family/kit';
 import { expandPath } from './inventory.ts';
 import type { IdeSpec } from './registry.ts';
 
@@ -82,12 +83,11 @@ export function writeNotes(vaultDir: string, notes: ObsidianNote[]): { written: 
   let skipped = 0;
   for (const note of notes) {
     const file = join(vaultDir, note.path);
-    mkdirSync(join(vaultDir, note.path.split('/').slice(0, -1).join('/')), { recursive: true });
     if (existsSync(file) && readFileSync(file, 'utf8') === note.content) {
       skipped++;
       continue;
     }
-    writeFileSync(file, note.content, 'utf8');
+    writeFileAtomic(file, note.content);
     written.push(note.path);
   }
   return { written, skipped };

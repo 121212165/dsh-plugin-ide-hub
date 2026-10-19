@@ -190,7 +190,7 @@ export interface WeekSource {
   sessionId: string;
   at: string;
   day: string;
-  totalTokens?: number;
+  totalTokens?: number | undefined;
 }
 
 export interface WeekRow {
