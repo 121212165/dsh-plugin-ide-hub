@@ -27,6 +27,15 @@
   "dsh": {
     "bundle": {
       "patch": "./cordis.patch.yml"
+    },
+    "catalog": {
+      "category": "编排与界面",
+      "blurb": "跨 IDE 统一管理层（8 适配器含国产）",
+      "entries": "`/ide-hub`",
+      "featured": true,
+      "featuredOrder": 1,
+      "featuredBlurb": "一个入口管住所有编码 IDE：8 个 IDE 零 API 盘点（含 Trae / Qoder / CatPaw 国产适配）、用量统计、会话一键恢复、规则一份本体多 IDE 下发",
+      "featuredEntries": "`/ide-hub` `/hub-usage` `/hub-sessions` `/hub-init` `/today`"
     }
   },
   "engines": {
